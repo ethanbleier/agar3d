@@ -90,28 +90,69 @@ npm run server
 
 4. Open your browser and navigate to `http://localhost:3000` (or the port specified in the console)
 
+## Controls
+
+### Keyboard Controls
+- **W, A, S, D** or **Arrow Keys**: Move your cell in 3D space
+- **Space**: Split your cell (when large enough)
+- **E**: Eject mass
+- **Shift**: Boost (uses mass)
+- **Q**: Toggle camera mode
+- **ESC**: Open game menu
+
+### Mouse Controls
+- **Mouse Movement**: Control direction
+- **Left Click**: Move toward cursor
+- **Right Click**: Split toward cursor
+- **Scroll Wheel**: Zoom in/out
+
+### Mobile Controls
+- **Drag**: Move in direction
+- **Double Tap**: Split
+- **Two-finger Pinch**: Zoom in/out
+- **Two-finger Tap**: Eject mass
+- **Three-finger Tap**: Open menu
+
 ## Project Structure
 
 ```
 agar3d/
-├── public/              # Static assets
-│   ├── assets/          # Game assets (textures, models, sounds)
-│   └── index.html       # Main HTML file
-├── src/                 # Source code
-│   ├── client/          # Client-side code
-│   │   ├── components/  # Game components
-│   │   ├── core/        # Core game functionality
-│   │   ├── rendering/   # Three.js rendering code
-│   │   └── index.js     # Client entry point
-│   ├── server/          # Server-side code (for multiplayer)
-│   │   ├── game/        # Game logic
-│   │   └── index.js     # Server entry point
-│   └── shared/          # Code shared between client and server
-│       ├── config.js    # Game configuration
-│       └── utils/       # Utility functions
-├── .gitignore           # Git ignore file
-├── package.json         # Project dependencies and scripts
-└── README.md            # Project documentation
+├── package.json                # Root project configuration
+│
+├── client/
+│   ├── index.html              # Main HTML file
+│   ├── package.json            # Client dependencies
+│   ├── vite.config.js          # Vite bundler configuration
+│   │
+│   ├── css/
+│   │   └── style.css           # Main CSS styles
+│   │
+│   └── js/
+│       ├── app.js              # Main client entry point
+│       │
+│       ├── game/
+│       │   ├── index.js        # Game initialization and main loop
+│       │   ├── player.js       # Player class with movement and rendering
+│       │   ├── food.js         # Food class for collectible items
+│       │   ├── camera.js       # Camera controller for player following
+│       │   ├── physics.js      # Client-side physics and collision detection
+│       │   └── rendering.js    # Visual effects and rendering optimizations
+│       │
+│       ├── networking/
+│       │   └── socket.js       # WebSocket client implementation
+│       │
+│       └── ui/
+│           └── ui.js           # User interface components
+│
+└── server/
+    ├── index.js                # Main server entry point
+    ├── package.json            # Server dependencies
+    │
+    └── game/
+        ├── gameServer.js       # Main game server logic
+        ├── serverPlayer.js     # Server-side player implementation
+        ├── serverFood.js       # Server-side food implementation
+        └── physics.js          # Server-side physics system
 ```
 
 ## Development Workflow

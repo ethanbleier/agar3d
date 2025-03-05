@@ -1,0 +1,338 @@
+/* Main stylesheet for Agar3D */
+
+/* Reset and Base Styles */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body, html {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    font-family: Arial, sans-serif;
+    background-color: #000;
+}
+
+/* Game Container (Three.js canvas will be appended here) */
+#game-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+}
+
+/* Screen Overlay (for start screen, game over, etc.) */
+.screen {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: rgba(0, 0, 64, 0.85);
+    z-index: 10;
+}
+
+/* Start Screen */
+.start-container {
+    background-color: rgba(255, 255, 255, 0.9);
+    border-radius: 10px;
+    padding: 30px;
+    text-align: center;
+    max-width: 500px;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+}
+
+.start-container h1 {
+    font-size: 48px;
+    margin-bottom: 10px;
+    color: #333;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.start-container p {
+    margin-bottom: 20px;
+    color: #666;
+}
+
+/* Input Group */
+.input-group {
+    margin: 20px 0;
+}
+
+#username-input {
+    padding: 12px;
+    font-size: 18px;
+    border: 2px solid #ccc;
+    border-radius: 5px;
+    margin-right: 10px;
+    outline: none;
+    width: 60%;
+}
+
+#username-input:focus {
+    border-color: #4CAF50;
+    box-shadow: 0 0 5px rgba(76, 175, 80, 0.5);
+}
+
+#start-button {
+    padding: 12px 24px;
+    font-size: 18px;
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+
+#start-button:hover {
+    background-color: #45a049;
+}
+
+#start-button:active {
+    transform: scale(0.98);
+}
+
+/* Instructions */
+.instructions {
+    text-align: left;
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid #eee;
+}
+
+.instructions h2 {
+    margin-bottom: 10px;
+    color: #333;
+}
+
+.instructions ul {
+    padding-left: 20px;
+    color: #555;
+}
+
+.instructions li {
+    margin-bottom: 5px;
+}
+
+/* Game UI */
+.game-ui {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 5;
+    display: none;
+}
+
+/* Leaderboard */
+.leaderboard {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background-color: rgba(255, 255, 255, 0.8);
+    border-radius: 5px;
+    padding: 10px;
+    width: 200px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+}
+
+.leaderboard h3 {
+    margin: 0 0 10px 0;
+    text-align: center;
+    color: #333;
+    font-size: 16px;
+    border-bottom: 1px solid #ddd;
+    padding-bottom: 5px;
+}
+
+.leaderboard ol {
+    margin: 0;
+    padding-left: 25px;
+    color: #555;
+}
+
+.leaderboard li {
+    margin-bottom: 2px;
+}
+
+/* Player Stats */
+.stats {
+    position: absolute;
+    bottom: 10px;
+    left: 10px;
+    background-color: rgba(255, 255, 255, 0.8);
+    border-radius: 5px;
+    padding: 10px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+    color: #333;
+    font-size: 14px;
+}
+
+.stats div {
+    margin-bottom: 2px;
+}
+
+/* Message System */
+.messages {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    width: 300px;
+    pointer-events: none;
+}
+
+.message {
+    background-color: rgba(255, 255, 255, 0.8);
+    border-radius: 5px;
+    padding: 10px;
+    margin-bottom: 5px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+    animation: fadeOut 5s forwards;
+}
+
+.message.info {
+    border-left: 4px solid #2196F3;
+}
+
+.message.success {
+    border-left: 4px solid #4CAF50;
+}
+
+.message.warning {
+    border-left: 4px solid #FFC107;
+}
+
+.message.error {
+    border-left: 4px solid #F44336;
+}
+
+@keyframes fadeOut {
+    0% { opacity: 1; }
+    70% { opacity: 1; }
+    100% { opacity: 0; }
+}
+
+/* Game Over Screen */
+.stats-summary {
+    margin: 20px 0;
+    padding: 10px;
+    background-color: rgba(0, 0, 0, 0.05);
+    border-radius: 5px;
+    text-align: left;
+}
+
+.stats-summary p {
+    margin: 5px 0;
+}
+
+#play-again-button {
+    padding: 12px 24px;
+    font-size: 18px;
+    background-color: #2196F3;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+
+#play-again-button:hover {
+    background-color: #0b7dda;
+}
+
+/* Media Queries for Responsive Design */
+@media (max-width: 768px) {
+    .start-container {
+        padding: 20px;
+        max-width: 90%;
+    }
+    
+    .start-container h1 {
+        font-size: 36px;
+    }
+    
+    #username-input, #start-button {
+        width: 100%;
+        margin: 0 0 10px 0;
+    }
+    
+    .leaderboard {
+        width: 150px;
+        font-size: 12px;
+    }
+    
+    .messages {
+        width: 200px;
+    }
+}
+
+/* Mobile Controls (touch overlay for mobile devices) */
+.mobile-controls {
+    display: none;
+    position: absolute;
+    bottom: 20px;
+    right: 20px;
+    z-index: 6;
+}
+
+.joystick-base {
+    position: relative;
+    width: 120px;
+    height: 120px;
+    background-color: rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.5);
+}
+
+.joystick-handle {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 50px;
+    height: 50px;
+    background-color: rgba(255, 255, 255, 0.8);
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.9);
+    pointer-events: none;
+}
+
+.action-buttons {
+    position: absolute;
+    bottom: 20px;
+    left: 20px;
+    display: flex;
+    gap: 10px;
+    z-index: 6;
+}
+
+.action-button {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background-color: rgba(255, 255, 255, 0.3);
+    border: 2px solid rgba(255, 255, 255, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 14px;
+    color: white;
+    font-weight: bold;
+}
+
+/* Show mobile controls on touch devices */
+@media (pointer: coarse) {
+    .mobile-controls, .action-buttons {
+        display: block;
+    }
+}
