@@ -41,14 +41,52 @@ Agar3D reimagines the classic Agar.io gameplay in a full 3D environment. Players
    yarn install
    ```
 
-3. Start the development server:
-   ```
-   npm run dev
-   ```
-   or
-   ```
-   yarn dev
-   ```
+### Quick Start
+
+The project includes a startup script (`start.sh`) for easy development. Make sure to make it executable first:
+
+```bash
+chmod +x start.sh
+```
+
+Available commands:
+
+```bash
+# Start development server only
+./start.sh -d
+# or
+./start.sh --dev
+
+# Start backend server only
+./start.sh -s
+# or
+./start.sh --server
+
+# Start both servers (if supported by your system)
+./start.sh -b
+# or
+./start.sh --both
+
+# Install/reinstall dependencies
+./start.sh -i
+# or
+./start.sh --install
+
+# Show help
+./start.sh -h
+# or
+./start.sh --help
+```
+
+If you prefer using npm directly:
+
+```bash
+# Start development server
+npm run dev
+
+# Start backend server
+npm run server
+```
 
 4. Open your browser and navigate to `http://localhost:3000` (or the port specified in the console)
 
