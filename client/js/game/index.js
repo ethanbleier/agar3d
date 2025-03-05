@@ -65,25 +65,28 @@ export class Game {
         directionalLight.position.set(1, 1, 1).normalize();
         this.scene.add(directionalLight);
         
-        // Set up renderer with minimal settings for better performance
+        // Instead of using "powerPreference: 'high-performance'", revert to a simpler config
         try {
-            this.renderer = new THREE.WebGLRenderer({ 
-                antialias: true,  // Enable antialiasing for better visual quality
-                alpha: true,      // Allow alpha channel if you need transparency
-                canvas: document.createElement('canvas'),
-                powerPreference: 'high-performance'
+            this.renderer = new THREE.WebGLRenderer({
+                antialias: true, // Keep antialiasing for better visual quality
+                alpha: true      // Allow alpha if needed, or set to false if you prefer opaque
             });
             
             console.log('WebGL renderer created successfully');
-            this.renderer.setPixelRatio(window.devicePixelRatio); // Use device pixel ratio for higher-res rendering
+            
+            // Use device pixel ratio for higher-res rendering
+            this.renderer.setPixelRatio(window.devicePixelRatio);
+            
+            // Fill the window and maintain aspect ratio
             this.renderer.setSize(window.innerWidth, window.innerHeight);
-            this.container.innerHTML = ''; // Clear any previous content
+            
+            // Clear out any old content from container
+            this.container.innerHTML = '';
             this.container.appendChild(this.renderer.domElement);
             
             // Force a clear to ensure WebGL context is working
             this.renderer.setClearColor(0x000040, 1);
             this.renderer.clear();
-            
         } catch (e) {
             console.error('Error creating WebGL renderer:', e);
             const warning = document.createElement('div');
