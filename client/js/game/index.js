@@ -65,17 +65,17 @@ export class Game {
         directionalLight.position.set(1, 1, 1).normalize();
         this.scene.add(directionalLight);
         
-        // Set up renderer with explicit WebGL context
+        // Set up renderer with minimal settings for better performance
         try {
             this.renderer = new THREE.WebGLRenderer({ 
-                antialias: true,
-                alpha: true,
+                antialias: false, // Disable antialiasing for performance
+                alpha: false,     // Disable alpha for performance
                 canvas: document.createElement('canvas'),
                 powerPreference: 'high-performance'
             });
             
             console.log('WebGL renderer created successfully');
-            this.renderer.setPixelRatio(window.devicePixelRatio);
+            this.renderer.setPixelRatio(1); // Use lower pixel ratio for performance
             this.renderer.setSize(window.innerWidth, window.innerHeight);
             this.container.innerHTML = ''; // Clear any previous content
             this.container.appendChild(this.renderer.domElement);
@@ -210,12 +210,11 @@ export class Game {
     }
     
     addTestObject() {
-        // Add a bright, visible test object to verify rendering is working
+        // Add a bright, visible test object with simpler material
         const geometry = new THREE.BoxGeometry(5, 5, 5);
         const material = new THREE.MeshBasicMaterial({ 
             color: 0xff00ff, // Bright magenta color
-            wireframe: true,
-            linewidth: 2
+            wireframe: true
         });
         this.testCube = new THREE.Mesh(geometry, material);
         this.testCube.position.set(0, 5, 0); // Position above the origin
@@ -262,26 +261,29 @@ export class Game {
             this.localPlayer.rotation,
             deltaTime
         );
+        
+        // Call render with deltaTime
+        this.render(deltaTime);
     }
     
-    render() {
-        // Render the scene
+    render(deltaTime = 0.016) {
+        // Added default value to prevent undefined error
+        if (!this.isRunning) return;
+        
+        // Simplified camera update
+        if (this.localPlayer) {
+            this.cameraController.followPlayer(
+                this.localPlayer.position,
+                this.localPlayer.rotation,
+                deltaTime
+            );
+        }
+        
+        // Simplified rendering - remove complex operations
         try {
-            if (!this.renderer) {
-                console.error('Renderer is not initialized');
-                return;
-            }
-            
-            // Rotate test cube if it exists to make sure animation is working
-            if (this.testCube) {
-                this.testCube.rotation.x += 0.01;
-                this.testCube.rotation.y += 0.01;
-            }
-            
-            console.log('Rendering scene');
             this.renderer.render(this.scene, this.camera);
-        } catch (e) {
-            console.error('Error in render method:', e);
+        } catch (error) {
+            console.error('WebGL rendering error:', error);
         }
     }
     

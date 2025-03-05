@@ -14,7 +14,7 @@ export class RenderSystem {
         this.enableHDR = false;
         
         // Performance settings
-        this.qualityLevel = 'medium'; // low, medium, high
+        this.qualityLevel = 'low'; // Changed from 'medium' to 'low'
         this.enableFrustumCulling = true;
         this.enableLOD = true; // Level of Detail
         
@@ -80,8 +80,8 @@ export class RenderSystem {
             dirLight.shadow.camera.left = -60;
             dirLight.shadow.camera.top = 60;
             dirLight.shadow.camera.bottom = -60;
-            dirLight.shadow.mapSize.width = 1024;
-            dirLight.shadow.mapSize.height = 1024;
+            dirLight.shadow.mapSize.width = 512;
+            dirLight.shadow.mapSize.height = 512;
             this.scene.add(dirLight);
         }
     }
@@ -307,5 +307,37 @@ export class RenderSystem {
                 object.visible = frustum.intersectsSphere(sphere);
             }
         }
+    }
+    
+    // Reduce shader complexity when the "too many uniforms" error occurs
+    reduceShaderComplexity(scene) {
+        console.log("Reducing shader complexity to prevent 'too many uniforms' error");
+        
+        // Disable shadows on all lights
+        scene.traverse(object => {
+            if (object.isLight && object.castShadow) {
+                object.castShadow = false;
+            }
+            
+            // Simplify materials
+            if (object.isMesh) {
+                if (object.material) {
+                    // Replace complex materials with simpler ones if needed
+                    if (object.material.type === 'MeshStandardMaterial') {
+                        const simplemat = new THREE.MeshBasicMaterial({
+                            color: object.material.color || 0xcccccc,
+                            transparent: object.material.transparent || false,
+                            opacity: object.material.opacity || 1.0
+                        });
+                        object.material.dispose();
+                        object.material = simplemat;
+                    }
+                }
+            }
+        });
+        
+        // Set lowest quality settings
+        this.qualityLevel = 'low';
+        this.configureRenderer();
     }
 }
