@@ -1,20 +1,19 @@
-// Main client entry point for Agar3D
+// Updated Main client entry point for Agar3D
 
-import * as THREE from 'three';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { Game } from './game/index.js';
 import { SocketManager } from './networking/socket.js';
 import { UI } from './ui/ui.js';
+import { THREE, OrbitControls } from './lib/three-instance.js';
 
-// Global variables
+
 let game;
 let socketManager;
 let ui;
+let animationFrameId; // To store the animation frame ID
 
 // Initialize the game when the DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
     init();
-    animate();
 });
 
 // Initialize all components
@@ -35,12 +34,46 @@ function init() {
 
     // Handle window resize
     window.addEventListener('resize', onWindowResize);
+    
+    // Prevent context menu on right-click for the game container
+    document.getElementById('game-container').addEventListener('contextmenu', (event) => {
+        event.preventDefault();
+        return false;
+    });
+    
+    // Add instructions about mouse capture to the UI
+    const instructions = document.querySelector('.instructions ul');
+    if (instructions) {
+        const mouseCaptureItem = document.createElement('li');
+        mouseCaptureItem.textContent = 'Click in game to capture mouse, ESC or L to release';
+        instructions.appendChild(mouseCaptureItem);
+        
+        const rightClickItem = document.createElement('li');
+        rightClickItem.textContent = 'Right Click: Boost';
+        instructions.appendChild(rightClickItem);
+        
+        const cameraItem = document.createElement('li');
+        cameraItem.textContent = 'C: Change camera view';
+        instructions.appendChild(cameraItem);
+    }
+}
+
+// Game loop function that updates and renders the game
+function gameLoop() {
+    if (game) {
+        console.log('Game loop running - update and render');
+        game.update();
+        game.render();
+    }
+    animationFrameId = requestAnimationFrame(gameLoop);
 }
 
 // Start the game with the given username
 function startGame(username) {
     // Hide start screen
     ui.hideStartScreen();
+    
+    console.log('Starting game with username:', username);
     
     // Initialize socket connection
     socketManager = new SocketManager();
@@ -53,11 +86,19 @@ function startGame(username) {
         socketManager: socketManager
     });
     
+    console.log('Game initialized, starting game loop');
+    
     // Set up socket event listeners
     setupSocketListeners();
     
     // Show game UI
     ui.showGameUI();
+    
+    // Start game loop
+    if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+    }
+    animationFrameId = requestAnimationFrame(gameLoop);
 }
 
 // Set up socket event listeners
@@ -73,61 +114,10 @@ function setupSocketListeners() {
     socketManager.on('gameState', (gameState) => {
         game.updateGameState(gameState);
     });
-    
-    socketManager.on('foodSpawned', (food) => {
-        game.addFood(food);
-    });
-    
-    socketManager.on('foodConsumed', (foodId) => {
-        game.removeFood(foodId);
-    });
-    
-    socketManager.on('leaderboard', (leaderboard) => {
-        ui.updateLeaderboard(leaderboard);
-    });
 }
 
-// Animation loop
-function animate() {
-    requestAnimationFrame(animate);
-    
-    if (game) {
-        game.update();
-        game.render();
-    }
-}
-
-// Handle window resize
 function onWindowResize() {
     if (game) {
         game.onWindowResize();
     }
 }
-
-// Handle key presses
-document.addEventListener('keydown', (event) => {
-    if (game) {
-        game.handleKeyDown(event);
-    }
-});
-
-// Handle key releases
-document.addEventListener('keyup', (event) => {
-    if (game) {
-        game.handleKeyUp(event);
-    }
-});
-
-// Handle mouse movement for direction
-document.addEventListener('mousemove', (event) => {
-    if (game) {
-        game.handleMouseMove(event);
-    }
-});
-
-// Handle mouse click for actions (e.g., splitting)
-document.addEventListener('click', (event) => {
-    if (game) {
-        game.handleClick(event);
-    }
-});

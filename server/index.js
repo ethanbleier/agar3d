@@ -10,15 +10,35 @@ const { GameServer } = require('./game/gameServer');
 const app = express();
 const server = http.createServer(app);
 
+// Configure CORS for Express
+app.use((req, res, next) => {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+    res.header('Access-Control-Allow-Credentials', 'true');
+    
+    // Handle preflight requests
+    if (req.method === 'OPTIONS') {
+        return res.status(200).end();
+    }
+    
+    next();
+});
+
 // Serve static files from client directory
 app.use(express.static(path.join(__dirname, '../client')));
 
 // Initialize Socket.io server
 const io = new Server(server, {
     cors: {
-        origin: '*',
-        methods: ['GET', 'POST']
-    }
+        origin: '*',  // Allow all origins
+        methods: ['GET', 'POST'],
+        credentials: false
+    },
+    pingTimeout: 60000,
+    pingInterval: 25000,
+    connectTimeout: 30000,
+    allowEIO3: true
 });
 
 // Set up routes
