@@ -8,13 +8,13 @@ export class RenderSystem {
         this.scene = scene;
         this.renderer = renderer;
         
-        // Visual effects settings
+        // Visual effects settings - set conservative defaults
         this.enableBloom = false;
         this.enablePostProcessing = false;
         this.enableHDR = false;
         
-        // Performance settings
-        this.qualityLevel = 'low'; // Changed from 'medium' to 'low'
+        // Performance settings - use medium quality for better compatibility
+        this.qualityLevel = 'medium'; // Changed from 'low' to 'medium'
         this.enableFrustumCulling = true;
         this.enableLOD = true; // Level of Detail
         
@@ -34,18 +34,20 @@ export class RenderSystem {
         // Configure renderer based on quality settings
         switch (this.qualityLevel) {
             case 'low':
-                this.renderer.setPixelRatio(window.devicePixelRatio * 0.5);
+                this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.0));
                 this.renderer.shadowMap.enabled = false;
+                this.renderer.outputEncoding = THREE.LinearEncoding; // More efficient
                 break;
                 
             case 'medium':
-                this.renderer.setPixelRatio(window.devicePixelRatio * 0.75);
+                this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
                 this.renderer.shadowMap.enabled = true;
                 this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+                this.renderer.outputEncoding = THREE.sRGBEncoding; // Better colors
                 break;
                 
             case 'high':
-                this.renderer.setPixelRatio(window.devicePixelRatio);
+                this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2.0));
                 this.renderer.shadowMap.enabled = true;
                 this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
                 this.renderer.outputEncoding = THREE.sRGBEncoding;
@@ -55,6 +57,10 @@ export class RenderSystem {
                 }
                 break;
         }
+        
+        // Common settings for all quality levels
+        this.renderer.gammaFactor = 2.2;
+        this.renderer.physicallyCorrectLights = true;
     }
     
     setupPostProcessing() {

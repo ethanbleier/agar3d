@@ -73,8 +73,11 @@ class ServerPlayer {
         if (distance > 0.1) {
             direction.normalize();
             
-            // Scale movement speed based on mass (larger players move slower)
-            const speedFactor = 1 / Math.sqrt(this.mass);
+            // Scale movement speed based on mass in increments of 10
+            // Calculate the tier based on mass (1-10 = tier 0, 11-20 = tier 1, etc.)
+            const massTier = Math.floor(this.mass / 10);
+            // Apply a constant factor for each tier
+            const speedFactor = 1 / (1 + massTier * 0.3);
             const moveSpeed = this.maxSpeed * speedFactor;
             
             // Set velocity based on direction and speed
@@ -98,8 +101,9 @@ class ServerPlayer {
         this.score += amount * 10;
         this.foodEaten += 1;
         
-        // Decrease maximum speed as player grows
-        this.maxSpeed = 10 / Math.sqrt(this.mass);
+        // Decrease maximum speed as player grows in steps of mass 10
+        const massTier = Math.floor(this.mass / 10);
+        this.maxSpeed = 10 / (1 + massTier * 0.3);
     }
     
     updateSize() {

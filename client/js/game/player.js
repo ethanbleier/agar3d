@@ -14,6 +14,13 @@ export class Player {
         this.mass = config.mass || 1; // Initial mass
         this.radius = config.radius || 1; // Initial radius
         
+        // Water drop animation parameters
+        this.animationTime = 0;
+        this.wobbleFrequency = 2.5; // Speed of wobble
+        this.wobbleAmplitude = 0.1; // Amount of deformation
+        this.originalVertices = []; // Store original vertex positions
+        this.vertexNormals = []; // Store vertex normals for deformation
+        
         // Create mesh
         this.createMesh();
         
@@ -29,8 +36,25 @@ export class Player {
     }
     
     createMesh() {
-        // Create sphere for the player
-        const geometry = new THREE.SphereGeometry(1, 32, 32);
+        // Create a higher detail sphere for the water drop effect
+        const geometry = new THREE.SphereGeometry(1, 64, 48);
+        
+        // Store original vertices and normals for animation
+        const positionAttribute = geometry.getAttribute('position');
+        const normalAttribute = geometry.getAttribute('normal');
+        
+        this.originalVertices = [];
+        this.vertexNormals = [];
+        
+        for (let i = 0; i < positionAttribute.count; i++) {
+            const vertex = new THREE.Vector3();
+            vertex.fromBufferAttribute(positionAttribute, i);
+            this.originalVertices.push(vertex.clone());
+            
+            const normal = new THREE.Vector3();
+            normal.fromBufferAttribute(normalAttribute, i);
+            this.vertexNormals.push(normal.clone());
+        }
         
         // Create material with more reflectivity and slight transparency
         const material = new THREE.MeshPhongMaterial({
@@ -55,38 +79,63 @@ export class Player {
         const canvas = document.createElement('canvas');
         const context = canvas.getContext('2d');
         canvas.width = 256;
-        canvas.height = 64;
+        canvas.height = 128; // Increased height for larger font
         
-        // Draw the username on the canvas
-        context.font = 'Bold 24px Arial';
+        // Clear the canvas with a transparent background
+        context.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // Draw the username on the canvas with a larger font
+        context.font = 'Bold 36px Arial'; // Increased font size
         context.fillStyle = 'white';
         context.textAlign = 'center';
         context.fillText(this.username, canvas.width / 2, canvas.height / 2);
         
         // Create a texture from the canvas
         const texture = new THREE.CanvasTexture(canvas);
+        texture.needsUpdate = true;
         
-        // Create a sprite with the texture
-        const spriteMaterial = new THREE.SpriteMaterial({ map: texture });
+        // Create a sprite with the texture - this will always face the camera
+        const spriteMaterial = new THREE.SpriteMaterial({ 
+            map: texture,
+            transparent: true
+        });
+        
+        // Create the label as a completely separate entity, not part of the mesh
         this.label = new THREE.Sprite(spriteMaterial);
-        this.label.scale.set(2, 0.5, 1);
-        this.label.position.set(0, 1.5, 0); // Position above the sphere
         
-        // Add the label to the player mesh
-        this.mesh.add(this.label);
+        // Set initial scale and position
+        const initialScale = 3;
+        this.label.scale.set(initialScale, initialScale * 0.5, 1);
+        
+        // Position will be updated in the update method
+        // Add the label directly to the scene instead of the player mesh
+        // This will be handled in the app.js file
+        
+        // Store a reference to the player for updating the label position
+        this.label.userData.player = this;
     }
     
     update(deltaTime) {
         // Update mesh position based on player position
         this.mesh.position.copy(this.position);
         
-        // Always make the label face the camera
+        // Update label position to stay above the player
+        // Label position will now be updated independently of player rotation
         if (this.label) {
-            this.label.quaternion.copy(this.mesh.parent.quaternion).invert();
+            // Calculate new position above the player
+            const labelPosition = this.position.clone();
+            labelPosition.y += this.radius * 2.5 + 1; // More height to avoid blocking view
+            
+            // Update the label's position
+            this.label.position.copy(labelPosition);
         }
         
-        // Scale the move speed based on mass (larger players move slower)
-        this.moveSpeed = 10 / Math.sqrt(this.mass);
+        // Scale the move speed based on mass in increments of 10
+        const massTier = Math.floor(this.mass / 10);
+        this.moveSpeed = 10 / (1 + massTier * 0.3);
+        
+        // Update water drop animation
+        this.animateWaterDrop(deltaTime);
         
         // Handle pulse animation after splitting
         if (this.pulseTime > 0) {
@@ -95,14 +144,14 @@ export class Player {
             
             // Interpolate between start and end scale
             const currentScale = this.pulseStartScale.clone().lerp(this.pulseEndScale, progress);
-            this.sphereMesh.scale.copy(currentScale);
+            this.scale.copy(currentScale);
             
             // Decrease pulse time
             this.pulseTime -= deltaTime;
             
             // Reset when complete
             if (this.pulseTime <= 0) {
-                this.sphereMesh.scale.copy(this.scale);
+                this.scale.copy(this.pulseEndScale);
                 this.pulseTime = 0;
             }
         }
@@ -119,7 +168,7 @@ export class Player {
             
             // Scale effect during ejection
             const scaleEffect = 1 + (0.2 * (this.ejectionTime / 0.5));
-            this.sphereMesh.scale.set(
+            this.scale.set(
                 this.scale.x * scaleEffect,
                 this.scale.y * scaleEffect,
                 this.scale.z * scaleEffect
@@ -132,7 +181,7 @@ export class Player {
             if (this.ejectionTime <= 0) {
                 this.ejectionDirection = null;
                 this.ejectionTime = 0;
-                this.sphereMesh.scale.copy(this.scale);
+                this.scale.set(this.radius, this.radius, this.radius);
             }
         }
     }
@@ -160,13 +209,15 @@ export class Player {
         
         // Update scale
         this.scale.set(this.radius, this.radius, this.radius);
-        this.sphereMesh.scale.copy(this.scale);
         
-        // Update label position and scale
+        // For water drop effect, we don't directly apply scale to the mesh
+        // as it's handled in the animation method
+        
+        // Update label scale
         if (this.label) {
-            const labelScale = Math.min(2 * this.radius, 4);
-            this.label.scale.set(labelScale, labelScale * 0.25, 1);
-            this.label.position.y = 1.5 * this.radius;
+            // Calculate scale based on player size, but ensure it's visible
+            const labelScale = Math.max(2, Math.min(2.5 * this.radius, 5));
+            this.label.scale.set(labelScale, labelScale * 0.5, 1);
         }
     }
     
@@ -188,11 +239,6 @@ export class Player {
         
         // Add a small scale animation to the parent cell
         const originalScale = this.scale.clone();
-        this.sphereMesh.scale.set(
-            originalScale.x * 1.2,
-            originalScale.y * 1.2,
-            originalScale.z * 1.2
-        );
         
         // Add a pulsing animation to the parent cell
         this.pulseTime = 0.3; // Duration in seconds
@@ -219,39 +265,97 @@ export class Player {
     
     updateFromServer(position, rotation, scale) {
         // Update position from server (with interpolation for smoothness)
-        const positionArray = position;
-        const serverPosition = new THREE.Vector3().fromArray(positionArray);
+        const serverPosition = position instanceof THREE.Vector3 ? position : new THREE.Vector3().fromArray(position);
         this.position.lerp(serverPosition, 0.3); // Smooth interpolation
         
         // Update rotation from server
-        const rotationArray = rotation;
-        const serverRotation = new THREE.Quaternion().fromArray(rotationArray);
+        const serverRotation = rotation instanceof THREE.Quaternion ? rotation : new THREE.Quaternion().fromArray(rotation);
         this.rotation.slerp(serverRotation, 0.3); // Smooth interpolation
         this.mesh.quaternion.copy(this.rotation);
         
         // Update scale from server
-        const scaleArray = scale;
-        const serverScale = new THREE.Vector3().fromArray(scaleArray);
+        const serverScale = scale instanceof THREE.Vector3 ? scale : new THREE.Vector3().fromArray(scale);
         this.scale.lerp(serverScale, 0.3); // Smooth interpolation
-        this.sphereMesh.scale.copy(this.scale);
         
         // Update physics values based on scale
         this.radius = this.scale.x; // Assuming uniform scaling
         this.mass = Math.pow(this.radius, 3); // Mass is proportional to volume
         
-        // Update label position
+        // Update label position to stay above the player
         if (this.label) {
-            this.label.position.y = 1.5 * this.radius;
+            const labelPosition = this.position.clone();
+            labelPosition.y += this.radius * 2.5 + 1; // Position higher above the player
+            this.label.position.copy(labelPosition);
+            
+            // Update label scale based on player size
+            const labelScale = Math.max(2, Math.min(2.5 * this.radius, 5));
+            this.label.scale.set(labelScale, labelScale * 0.5, 1);
         }
     }
     
     dispose() {
         // Clean up resources when player is removed
-        this.sphereMesh.geometry.dispose();
-        this.sphereMesh.material.dispose();
-        if (this.label) {
-            this.label.material.map.dispose();
-            this.label.material.dispose();
+        if (this.sphereMesh) {
+            this.sphereMesh.geometry.dispose();
+            this.sphereMesh.material.dispose();
+            this.mesh.remove(this.sphereMesh);
+            this.sphereMesh = null;
+            
+            // Clear animation data
+            this.originalVertices = [];
+            this.vertexNormals = [];
         }
+        
+        // Clean up label resources
+        if (this.label) {
+            if (this.label.material.map) {
+                this.label.material.map.dispose();
+            }
+            this.label.material.dispose();
+            // Note: We don't remove the label from the scene here
+            // That's handled in the Game.removePlayer method
+        }
+    }
+
+    // New method to animate the water drop effect
+    animateWaterDrop(deltaTime) {
+        // Skip animation if not visible or during special effects
+        if (!this.originalVertices.length) {
+            return;
+        }
+        
+        // Update animation time
+        this.animationTime += deltaTime * this.wobbleFrequency;
+        
+        // Get the geometry for modification
+        const geometry = this.sphereMesh.geometry;
+        const positionAttribute = geometry.getAttribute('position');
+        
+        // Apply deformation to each vertex
+        for (let i = 0; i < this.originalVertices.length; i++) {
+            const originalVertex = this.originalVertices[i];
+            const normal = this.vertexNormals[i];
+            
+            // Calculate wobble factor based on position and time
+            const wobbleFactor = Math.sin(
+                this.animationTime + 
+                originalVertex.x * 2 + 
+                originalVertex.y * 3 + 
+                originalVertex.z * 2
+            ) * this.wobbleAmplitude;
+            
+            // Apply deformation along normal direction
+            const newPos = originalVertex.clone().addScaledVector(normal, wobbleFactor);
+            
+            // Apply scale
+            newPos.multiply(this.scale);
+            
+            // Update vertex position
+            positionAttribute.setXYZ(i, newPos.x, newPos.y, newPos.z);
+        }
+        
+        // Mark attributes for update
+        positionAttribute.needsUpdate = true;
+        geometry.computeVertexNormals();
     }
 }

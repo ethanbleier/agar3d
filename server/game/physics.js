@@ -67,18 +67,22 @@ class PhysicsSystem {
                 player.position, player.radius,
                 food.position, food.scale.x
             )) {
-                // Add food to removal list with player ID
+                // Get food value for growing the player
+                const foodValue = food.value || food.mass || 1;
+                
+                // Add food to removal list with player ID and food value
                 foodsToRemove.push({
                     foodId: foodId,
-                    playerId: player.id
+                    playerId: player.id,
+                    foodValue: foodValue
                 });
                 
                 // Grow player
-                player.grow(food.value);
+                player.grow(foodValue);
             }
         }
         
-        // Return list of consumed food IDs with player IDs
+        // Return list of consumed food with details
         return foodsToRemove;
     }
     

@@ -28,12 +28,19 @@ export class Food {
             opacity: 0.8
         });
         
+        // Make sure material updates properly
+        material.needsUpdate = true;
+        
         this.mesh = new THREE.Mesh(geometry, material);
         this.mesh.scale.copy(this.scale);
         this.mesh.position.copy(this.position);
         
+        // Enable shadows for the food
+        this.mesh.castShadow = true;
+        this.mesh.receiveShadow = true;
+        
         // Add a subtle point light to make food glow
-        const light = new THREE.PointLight(this.color, 0.3, 2);
+        const light = new THREE.PointLight(this.color, 0.3, this.radius * 3);
         light.position.set(0, 0, 0);
         this.mesh.add(light);
         

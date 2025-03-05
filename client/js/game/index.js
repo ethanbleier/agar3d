@@ -86,43 +86,52 @@ export class Game {
         directionalLight.position.set(1, 1, 1).normalize();
         this.scene.add(directionalLight);
         
-        // Instead of using "powerPreference: 'high-performance'", revert to a simpler config
+        // Create renderer with optimal settings 
         try {
             this.renderer = new THREE.WebGLRenderer({
-                antialias: true, // Keep antialiasing for better visual quality
-                alpha: true      // Allow alpha if needed, or set to false if you prefer opaque
+                antialias: true,  // Keep antialiasing for better visual quality
+                alpha: true,      // Allow transparency
+                premultipliedAlpha: false, // Better for transparent materials
+                preserveDrawingBuffer: true // Needed for some effects
             });
             
             console.log('WebGL renderer created successfully');
             
-            // Use device pixel ratio for higher-res rendering
-            this.renderer.setPixelRatio(window.devicePixelRatio);
+            // Use device pixel ratio for higher-res rendering, but cap it to avoid performance issues
+            const pixelRatio = Math.min(window.devicePixelRatio, 2);
+            this.renderer.setPixelRatio(pixelRatio);
             
-            // Fill the window and maintain aspect ratio
-            this.renderer.setSize(window.innerWidth, window.innerHeight);
+            // Set renderer size to container size
+            const width = this.container.clientWidth;
+            const height = this.container.clientHeight;
+            this.renderer.setSize(width, height);
             
-            // Clear out any old content from container
-            this.container.innerHTML = '';
+            // Enable physically correct lighting
+            this.renderer.physicallyCorrectLights = true;
+            
+            // Set color space for better color representation
+            this.renderer.outputEncoding = THREE.sRGBEncoding;
+            
+            // Add renderer to DOM
             this.container.appendChild(this.renderer.domElement);
             
-            // Force a clear to ensure WebGL context is working
-            this.renderer.setClearColor(0x000022, 1);
-            this.renderer.clear();
+            // Initialize camera after renderer is set up
+            this.camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
+            this.camera.position.set(0, 10, 10);
+            this.camera.lookAt(0, 0, 0);
+            
+            // Add camera controller
+            this.cameraController = new CameraController(this.camera, this.renderer.domElement);
         } catch (e) {
-            console.error('Error creating WebGL renderer:', e);
+            console.error('Error initializing WebGL renderer:', e);
             const warning = document.createElement('div');
-            warning.style.color = 'red';
-            warning.textContent = 'Error initializing WebGL renderer: ' + e.message;
+            warning.style.position = 'absolute';
+            warning.style.top = '50%';
+            warning.style.width = '100%';
+            warning.style.textAlign = 'center';
+            warning.textContent = 'Error initializing WebGL. Please try a different browser.';
             this.container.appendChild(warning);
-            return;
         }
-        
-        // Set up camera
-        this.camera = new THREE.PerspectiveCamera(
-            75, window.innerWidth / window.innerHeight, 0.1, 1000
-        );
-        this.camera.position.set(0, 30, 30);
-        this.camera.lookAt(0, 0, 0);
         
         // Initialize coordinate helpers
         this.addCoordinateHelpers();
@@ -315,6 +324,13 @@ export class Game {
             food.update(deltaTime);
         });
         
+        // Update mass orbs
+        if (this.massOrbs) {
+            this.massOrbs.forEach(massOrb => {
+                massOrb.update(deltaTime);
+            });
+        }
+        
         // Check if we need to spawn more food
         if (this.foods.size < this.minFood) {
             // Spawn new food at a rate of about 1 per second
@@ -438,31 +454,21 @@ export class Game {
     handleKeyDown(event) {
         this.keys[event.key] = true;
         
-        // Handle special keys
-        if (event.key === ' ' && !event.repeat) {
-            // Space bar for splitting
-            if (this.localPlayer && this.localPlayer.mass >= 2) {  // Only split if enough mass
-                // Calculate split direction based on mouse position
-                const splitDir = this.calculateMouseDirection();
+        // Handle special key presses
+        if (event.key === 'w' && !event.repeat) {
+            // W for pooping
+            if (this.localPlayer && this.localPlayer.mass > 2) {  // Only poop if enough mass
+                // Get poop info from player
+                const splitInfo = this.localPlayer.split();
                 
-                // Create temporary visual split effect
-                const splitMass = this.localPlayer.mass / 2;
-                const splitRadius = Math.cbrt(splitMass);
-                const splitPos = this.localPlayer.position.clone().add(
-                    splitDir.multiplyScalar(this.localPlayer.radius + splitRadius)
-                );
-                
-                // Update local player visually
-                this.localPlayer.mass = splitMass;
-                this.localPlayer.updateSize();
-                
-                // Send split command to server
-                this.socketManager.emit('splitPlayer', {
-                    direction: splitDir.toArray(),
-                    position: splitPos.toArray(),
-                    mass: splitMass
-                });
-                console.log('Split command sent to server');
+                if (splitInfo) {
+                    // Send split command to server
+                    this.socketManager.emit('splitPlayer');
+                    console.log('Split command sent to server');
+                    
+                    // Add split particles for visual effect
+                    this.addSplitParticles(this.localPlayer.position, this.localPlayer.color);
+                }
             }
         } else if (event.key.toLowerCase() === 'w' && !event.repeat) {
             // 'w' key for ejecting mass
@@ -480,6 +486,26 @@ export class Game {
                 // Update local player visually
                 this.localPlayer.mass -= orbMass;
                 this.localPlayer.updateSize();
+                
+                // Create a temporary local mass orb for immediate visual feedback
+                const tempMassOrb = new MassOrb({
+                    id: 'temp_' + Date.now(),
+                    ownerId: this.localPlayerId,
+                    position: orbPos.toArray(),
+                    velocity: ejectDir.clone().multiplyScalar(20).toArray(),
+                    mass: orbMass,
+                    radius: orbRadius,
+                    color: this.localPlayer.color
+                });
+                
+                // Add to scene temporarily (will be replaced by server version)
+                this.scene.add(tempMassOrb.mesh);
+                
+                // Remove after a short delay (server will send the real one)
+                setTimeout(() => {
+                    this.scene.remove(tempMassOrb.mesh);
+                    tempMassOrb.dispose();
+                }, 200);
                 
                 // Send eject command to server
                 this.socketManager.emit('ejectMass', {
@@ -617,7 +643,15 @@ export class Game {
                 position: new THREE.Vector3().fromArray(position),
                 color: new THREE.Color(color)
             });
+            
+            // Add player mesh to the scene
             this.scene.add(newPlayer.mesh);
+            
+            // Add label directly to the scene instead of as a child of the player mesh
+            if (newPlayer.label) {
+                this.scene.add(newPlayer.label);
+            }
+            
             this.players.set(id, newPlayer);
         }
     }
@@ -651,7 +685,15 @@ export class Game {
     removePlayer(id) {
         if (this.players.has(id)) {
             const player = this.players.get(id);
+            
+            // Remove player's mesh from the scene
             this.scene.remove(player.mesh);
+            
+            // Also remove the label
+            if (player.label) {
+                this.scene.remove(player.label);
+            }
+            
             this.players.delete(id);
         }
     }
@@ -881,6 +923,15 @@ export class Game {
         // Handle player split event
         this.socketManager.on('playerSplit', (data) => {
             this.handlePlayerSplit(data);
+        });
+        
+        // Handle mass orb events
+        this.socketManager.on('massEjected', (massData) => {
+            this.addMassOrb(massData);
+        });
+        
+        this.socketManager.on('massConsumed', (massId) => {
+            this.removeMassOrb(massId);
         });
         
         // Handle other socket events as needed
