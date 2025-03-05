@@ -1,6 +1,6 @@
 // Food class for Agar3D
 
-import * as THREE from 'three';
+import { THREE } from '../lib/three-instance.js';
 
 export class Food {
     constructor(config) {

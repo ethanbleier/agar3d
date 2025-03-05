@@ -17,6 +17,7 @@ export default defineConfig({
       '@': resolve(__dirname, './js')
     }
   },
+  publicDir: 'public',
   build: {
     outDir: 'dist',
     assetsDir: 'assets',

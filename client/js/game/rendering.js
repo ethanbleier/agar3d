@@ -1,6 +1,7 @@
 // Visual effects and rendering optimizations
 
-import * as THREE from 'three';
+import { THREE } from '../lib/three-instance.js';
+
 
 export class RenderSystem {
     constructor(scene, renderer) {

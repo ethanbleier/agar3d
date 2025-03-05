@@ -8,12 +8,40 @@ export class SocketManager {
         this.id = null;
         this.connected = false;
         this.eventListeners = {};
-        this.serverUrl = 'http://localhost:3000'; // Default server URL
+        // Automatically determine the server URL based on current location
+        this.serverUrl = this.determineServerUrl();
+    }
+    
+    // Helper to determine the appropriate server URL
+    determineServerUrl() {
+        const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
+        const host = window.location.hostname;
+        
+        // If we're running locally
+        if (host === 'localhost' || host === '127.0.0.1') {
+            return 'http://localhost:3000';
+        }
+        
+        // For preview or production, use same hostname but port 3000
+        return `${protocol}//${host}:3000`;
     }
     
     connect() {
-        // Initialize socket connection
-        this.socket = io(this.serverUrl);
+        // Initialize socket connection with more resilient configuration
+        console.log("Attempting to connect to:", this.serverUrl);
+        this.socket = io(this.serverUrl, {
+            transports: ['polling', 'websocket'],
+            reconnectionAttempts: 10,
+            reconnectionDelay: 1000,
+            timeout: 20000,
+            autoConnect: true
+        });
+        
+        // Add error handling for connection issues
+        this.socket.on('connect_error', (error) => {
+            console.error('Connection error:', error.message);
+            this.triggerEvent('connect_error', error);
+        });
         
         // Set up basic event handlers
         this.socket.on('connect', () => {

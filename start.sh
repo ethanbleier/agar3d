@@ -24,64 +24,77 @@ if ! command_exists npm; then
     exit 1
 fi
 
-# Function to start development server
-start_dev() {
-    echo -e "${GREEN}Starting development server...${NC}"
-    npm run dev
+# Function to start client development server only
+start_client() {
+    echo -e "${GREEN}Starting client development server...${NC}"
+    npm run client
 }
 
-# Function to start backend server
+# Function to start server only
 start_server() {
-    echo -e "${GREEN}Starting backend server...${NC}"
+    echo -e "${GREEN}Starting server...${NC}"
     npm run server
+}
+
+# Function to start server in development mode
+start_server_dev() {
+    echo -e "${GREEN}Starting server in development mode...${NC}"
+    npm run server:dev
+}
+
+# Function to start both client and server
+start_both() {
+    echo -e "${GREEN}Starting both client and server...${NC}"
+    npm start
+}
+
+# Function to preview the built client
+preview_client() {
+    echo -e "${GREEN}Starting preview server with server backend...${NC}"
+    npm run preview
 }
 
 # Function to install dependencies
 install_deps() {
-    echo -e "${YELLOW}Installing dependencies...${NC}"
-    npm install
+    echo -e "${YELLOW}Installing dependencies for the entire project...${NC}"
+    npm run setup
 }
 
 # Function to show help
 show_help() {
     echo "Usage: ./start.sh [option]"
     echo "Options:"
-    echo "  -d, --dev     Start development server only"
-    echo "  -s, --server  Start backend server only"
-    echo "  -b, --both    Start both development and backend servers"
-    echo "  -i, --install Install dependencies"
-    echo "  -h, --help    Show this help message"
+    echo "  -c, --client    Start client development server only"
+    echo "  -s, --server    Start server only"
+    echo "  -d, --server-dev Start server in development mode (with nodemon)"
+    echo "  -b, --both      Start both client and server (default)"
+    echo "  -p, --preview   Preview the built client with server running"
+    echo "  -i, --install   Install dependencies for all parts of the project"
+    echo "  -h, --help      Show this help message"
 }
 
-# Check if node_modules exists
-if [ ! -d "node_modules" ]; then
-    echo -e "${YELLOW}node_modules not found. Installing dependencies...${NC}"
+# Check if node_modules exists in root, client, and server directories
+if [ ! -d "node_modules" ] || [ ! -d "client/node_modules" ] || [ ! -d "server/node_modules" ]; then
+    echo -e "${YELLOW}Some node_modules not found. Installing dependencies...${NC}"
     install_deps
 fi
 
 # Process command line arguments
 case "$1" in
-    -d|--dev)
-        start_dev
+    -c|--client)
+        start_client
         ;;
     -s|--server)
         start_server
         ;;
+    -d|--server-dev)
+        start_server_dev
+        ;;
     -b|--both)
-        # Start both servers in separate terminals if possible
-        if command_exists gnome-terminal; then
-            gnome-terminal -- bash -c "npm run server; exec bash"
-            start_dev
-        elif command_exists osascript; then
-            # macOS approach
-            osascript -e "tell app \"Terminal\" to do script \"cd '$(pwd)' && npm run server\""
-            start_dev
-        else
-            echo -e "${YELLOW}Cannot open multiple terminals automatically.${NC}"
-            echo -e "${YELLOW}Please run the servers in separate terminals:${NC}"
-            echo "Terminal 1: npm run server"
-            echo "Terminal 2: npm run dev"
-        fi
+        start_both
+        ;;
+    -p|--preview)
+        preview_client
         ;;
     -i|--install)
         install_deps
@@ -90,7 +103,7 @@ case "$1" in
         show_help
         ;;
     *)
-        echo -e "${YELLOW}No option specified, starting development server...${NC}"
-        start_dev
+        echo -e "${YELLOW}No option specified, starting both client and server...${NC}"
+        start_both
         ;;
 esac

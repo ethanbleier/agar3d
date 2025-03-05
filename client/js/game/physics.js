@@ -1,6 +1,7 @@
 // Physics and collision detection
 
-import * as THREE from 'three';
+import { THREE } from '../lib/three-instance.js';
+
 
 export class PhysicsSystem {
     constructor() {
