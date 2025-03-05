@@ -6,9 +6,9 @@ class ServerFood {
     constructor(config) {
         this.id = config.id;
         this.position = new Vector3().copy(config.position);
-        this.scale = new Vector3().copy(config.scale);
+        this.scale = new Vector3().copy(config.scale || new Vector3(0.5, 0.5, 0.5));
         this.color = config.color;
-        this.value = 0.1; // How much mass the player gains when consuming this food
+        this.value = config.value || 0.1; // How much mass the player gains when consuming this food
         
         // Optional hover animation data (server keeps track to sync with clients)
         this.basePosition = this.position.clone();
@@ -29,7 +29,8 @@ class ServerFood {
             id: this.id,
             position: this.position.toArray(),
             scale: this.scale.toArray(),
-            color: this.color
+            color: this.color,
+            value: this.value
         };
     }
 }

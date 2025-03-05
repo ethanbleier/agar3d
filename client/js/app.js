@@ -2,13 +2,10 @@
 
 import { Game } from './game/index.js';
 import { SocketManager } from './networking/socket.js';
-import { UI } from './ui/ui.js';
 import { THREE, OrbitControls } from './lib/three-instance.js';
-
 
 let game;
 let socketManager;
-let ui;
 let animationFrameId; // To store the animation frame ID
 
 // Initialize the game when the DOM is loaded
@@ -18,10 +15,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Initialize all components
 function init() {
-    // Initialize UI (username input, leaderboard, etc.)
-    ui = new UI();
-    ui.showStartScreen();
-
     // Handle start button click
     document.getElementById('start-button').addEventListener('click', () => {
         const username = document.getElementById('username-input').value.trim();
@@ -40,22 +33,6 @@ function init() {
         event.preventDefault();
         return false;
     });
-    
-    // Add instructions about mouse capture to the UI
-    const instructions = document.querySelector('.instructions ul');
-    if (instructions) {
-        const mouseCaptureItem = document.createElement('li');
-        mouseCaptureItem.textContent = 'Click in game to capture mouse, ESC or L to release';
-        instructions.appendChild(mouseCaptureItem);
-        
-        const rightClickItem = document.createElement('li');
-        rightClickItem.textContent = 'Right Click: Boost';
-        instructions.appendChild(rightClickItem);
-        
-        const cameraItem = document.createElement('li');
-        cameraItem.textContent = 'C: Change camera view';
-        instructions.appendChild(cameraItem);
-    }
 }
 
 // Game loop function that updates and renders the game
@@ -71,7 +48,10 @@ function gameLoop() {
 // Start the game with the given username
 function startGame(username) {
     // Hide start screen
-    ui.hideStartScreen();
+    document.getElementById('start-screen').style.display = 'none';
+    
+    // Show game UI
+    document.getElementById('game-ui').style.display = 'block';
     
     console.log('Starting game with username:', username);
     
@@ -90,9 +70,6 @@ function startGame(username) {
     
     // Set up socket event listeners
     setupSocketListeners();
-    
-    // Show game UI
-    ui.showGameUI();
     
     // Start game loop
     if (animationFrameId) {
@@ -122,6 +99,15 @@ function setupSocketListeners() {
     
     socketManager.on('virusConsumed', (virusId) => {
         game.removeVirus(virusId);
+    });
+    
+    // Add handlers for mass orb events
+    socketManager.on('massEjected', (massData) => {
+        game.addMassOrb(massData);
+    });
+    
+    socketManager.on('massConsumed', (massId) => {
+        game.removeMassOrb(massId);
     });
     
     socketManager.on('playerPopped', (data) => {

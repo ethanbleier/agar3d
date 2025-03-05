@@ -9,6 +9,9 @@ class PhysicsSystem {
     }
     
     update(deltaTime, players, foods) {
+        // Track all consumed food
+        const allConsumedFood = [];
+        
         // Update all players
         for (const player of players.values()) {
             // Update player position and physics
@@ -18,11 +21,17 @@ class PhysicsSystem {
             this.constrainToWorld(player);
             
             // Check for food collisions
-            this.checkFoodCollisions(player, foods);
+            const consumedFood = this.checkFoodCollisions(player, foods);
+            if (consumedFood.length > 0) {
+                allConsumedFood.push(...consumedFood);
+            }
         }
         
         // Check for player-player collisions
         this.checkPlayerCollisions(players);
+        
+        // Return all consumed food
+        return allConsumedFood;
     }
     
     constrainToWorld(player) {
@@ -58,15 +67,18 @@ class PhysicsSystem {
                 player.position, player.radius,
                 food.position, food.scale.x
             )) {
-                // Add food to removal list
-                foodsToRemove.push(foodId);
+                // Add food to removal list with player ID
+                foodsToRemove.push({
+                    foodId: foodId,
+                    playerId: player.id
+                });
                 
                 // Grow player
                 player.grow(food.value);
             }
         }
         
-        // Return list of consumed food IDs
+        // Return list of consumed food IDs with player IDs
         return foodsToRemove;
     }
     

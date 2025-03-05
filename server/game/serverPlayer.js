@@ -67,8 +67,7 @@ class ServerPlayer {
         this.mass += amount;
         
         // Update radius and scale
-        this.radius = Math.cbrt(this.mass); // Cube root for 3D scaling
-        this.scale = new Vector3(this.radius, this.radius, this.radius);
+        this.updateSize();
         
         // Update score
         this.score += amount * 10;
@@ -76,6 +75,14 @@ class ServerPlayer {
         
         // Decrease maximum speed as player grows
         this.maxSpeed = 10 / Math.sqrt(this.mass);
+    }
+    
+    updateSize() {
+        // Update radius based on mass
+        this.radius = Math.cbrt(this.mass); // Cube root for 3D scaling
+        
+        // Update scale
+        this.scale = new Vector3(this.radius, this.radius, this.radius);
     }
     
     consumePlayer(otherPlayer) {

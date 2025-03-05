@@ -16,7 +16,7 @@ class GameServer {
         this.maxFood = 500;
         this.minFood = 300;
         this.foodSpawnRate = 5; // Food items per second
-        this.tickRate = 30; // Updates per second
+        this.tickRate = 60; // Updates per second
         
         // Game state
         this.players = new Map(); // Map of socket.id -> ServerPlayer
@@ -65,6 +65,11 @@ class GameServer {
             // Player boost action
             socket.on('boostPlayer', () => {
                 this.handlePlayerBoost(socket.id);
+            });
+            
+            // Player eject mass action
+            socket.on('ejectMass', () => {
+                this.handlePlayerEjectMass(socket.id);
             });
             
             // Player disconnected
@@ -141,6 +146,64 @@ class GameServer {
         console.log(`Player ${player.username} (${playerId}) attempted to boost`);
     }
     
+    handlePlayerEjectMass(playerId) {
+        const player = this.players.get(playerId);
+        if (!player) {
+            console.log(`Player ${playerId} not found for mass ejection`);
+            return;
+        }
+        
+        // Minimum mass required to eject
+        const MIN_MASS_TO_EJECT = 2;
+        // Mass amount to eject
+        const EJECTED_MASS_AMOUNT = 1;
+        
+        if (player.mass < MIN_MASS_TO_EJECT) {
+            console.log(`Player ${player.username} (${playerId}) doesn't have enough mass to eject`);
+            return; // Not enough mass to eject
+        }
+        
+        // Decrease player mass
+        player.mass -= EJECTED_MASS_AMOUNT;
+        player.updateSize(); // Update player size based on new mass
+        
+        // Create a mass orb in front of the player
+        const direction = new Vector3(0, 0, -1).applyQuaternion(player.rotation).normalize();
+        
+        // Position the mass orb in front of the player
+        const spawnPosition = player.position.clone().add(
+            direction.clone().multiplyScalar(player.radius + 0.5)
+        );
+        
+        // Create a unique ID for the mass orb
+        const massId = `mass_${uuidv4()}`;
+        
+        // Create the mass orb
+        const massOrb = {
+            id: massId,
+            type: 'mass',
+            position: spawnPosition.toArray(),
+            velocity: direction.clone().multiplyScalar(20).toArray(), // Shoot with velocity
+            ownerId: player.id, // Remember who ejected this mass
+            mass: EJECTED_MASS_AMOUNT,
+            radius: Math.cbrt(EJECTED_MASS_AMOUNT), // Radius based on mass
+            color: player.color, // Same color as the player
+            creationTime: Date.now(),
+            lifespan: 30000, // 30 seconds lifespan
+        };
+        
+        // Add mass orb to the game
+        if (!this.massOrbs) {
+            this.massOrbs = new Map();
+        }
+        this.massOrbs.set(massId, massOrb);
+        
+        // Broadcast the mass ejection to all clients
+        this.io.emit('massEjected', massOrb);
+        
+        console.log(`Player ${player.username} (${playerId}) ejected mass ${massId}`);
+    }
+    
     handlePlayerDisconnect(playerId) {
         const player = this.players.get(playerId);
         if (!player) return;
@@ -164,15 +227,35 @@ class GameServer {
     }
     
     update(deltaTime) {
-        if (!this.isRunning) return;
+        // Skip if not running
+        if (!this.isRunning) {
+            return;
+        }
         
-        // Spawn food if needed
+        // Update physics for players and foods
+        const consumedFood = this.physics.update(deltaTime, this.players, this.foods);
+        
+        // Remove consumed food and notify clients
+        if (consumedFood && consumedFood.length > 0) {
+            for (const { foodId, playerId } of consumedFood) {
+                // Remove food from game
+                this.foods.delete(foodId);
+                
+                // Notify all players
+                this.io.emit('foodConsumed', {
+                    foodId: foodId,
+                    playerId: playerId
+                });
+            }
+        }
+        
+        // Spawn new food if needed
         this.updateFood(deltaTime);
         
-        // Update physics (collisions, etc.)
-        this.physics.update(deltaTime, this.players, this.foods);
+        // Update mass orbs
+        this.updateMassOrbs(deltaTime);
         
-        // Send game state to all players
+        // Broadcast game state to all players
         this.broadcastGameState();
         
         // Update leaderboard
@@ -189,10 +272,15 @@ class GameServer {
     }
     
     updateFood(deltaTime) {
+        // Update existing food animations
+        for (const food of this.foods.values()) {
+            food.update(deltaTime);
+        }
+        
         // Spawn new food at a certain rate
         if (this.foods.size < this.minFood) {
             const foodToSpawn = Math.min(
-                this.foodSpawnRate,
+                Math.ceil(this.foodSpawnRate * deltaTime),
                 this.maxFood - this.foods.size
             );
             
@@ -211,7 +299,8 @@ class GameServer {
             id: foodId,
             position: this.getRandomPosition(),
             scale: new Vector3(0.5, 0.5, 0.5),
-            color: this.getRandomColor()
+            color: this.getRandomColor(),
+            value: 0.1 + Math.random() * 0.1 // Random value between 0.1 and 0.2
         });
         
         // Add food to game
@@ -219,27 +308,6 @@ class GameServer {
         
         // Notify all players of new food
         this.io.emit('foodSpawned', food.toClientData());
-    }
-    
-    consumeFood(foodId, playerId) {
-        const food = this.foods.get(foodId);
-        const player = this.players.get(playerId);
-        
-        if (!food || !player) return;
-        
-        // Remove food from game
-        this.foods.delete(foodId);
-        
-        // Increase player mass
-        const growAmount = 0.1; // How much the player grows from each food
-        player.grow(growAmount);
-        
-        // Notify all players
-        this.io.emit('foodConsumed', {
-            foodId: foodId,
-            playerId: playerId,
-            amount: growAmount
-        });
     }
     
     sendGameState(playerId) {
@@ -262,9 +330,11 @@ class GameServer {
     }
     
     createGameState() {
+        // Create a compact game state to send to clients
         return {
             players: Array.from(this.players.values()).map(player => player.toClientData()),
-            foods: Array.from(this.foods.values()).map(food => food.toClientData())
+            foods: Array.from(this.foods.values()).map(food => food.toClientData()),
+            massOrbs: this.massOrbs ? Array.from(this.massOrbs.values()) : []
         };
     }
     
@@ -350,6 +420,162 @@ class GameServer {
         
         this.isRunning = false;
         console.log('Game server shut down');
+    }
+    
+    // Update mass orbs positions and check for collisions
+    updateMassOrbs(deltaTime) {
+        if (!this.massOrbs) {
+            this.massOrbs = new Map();
+            return;
+        }
+        
+        const massOrbsToRemove = [];
+        const now = Date.now();
+        
+        // Update each mass orb
+        for (const [massId, massOrb] of this.massOrbs.entries()) {
+            // Check if mass orb has expired
+            if (now - massOrb.creationTime > massOrb.lifespan) {
+                massOrbsToRemove.push(massId);
+                continue;
+            }
+            
+            // Update position based on velocity
+            const position = new Vector3().fromArray(massOrb.position);
+            const velocity = new Vector3().fromArray(massOrb.velocity);
+            
+            // Apply velocity
+            position.add(velocity.clone().multiplyScalar(deltaTime));
+            
+            // Apply drag to slow down mass orb
+            velocity.multiplyScalar(0.98);
+            
+            // Update position and velocity
+            massOrb.position = position.toArray();
+            massOrb.velocity = velocity.toArray();
+            
+            // Keep mass orb within world boundaries
+            this.constrainMassOrbToWorld(massOrb);
+            
+            // Check for collisions with players
+            this.checkMassPlayerCollisions(massOrb, massId, massOrbsToRemove);
+            
+            // Check for collisions with viruses
+            this.checkMassVirusCollisions(massOrb, massId, massOrbsToRemove);
+        }
+        
+        // Remove expired or consumed mass orbs
+        for (const massId of massOrbsToRemove) {
+            this.massOrbs.delete(massId);
+        }
+    }
+    
+    // Keep mass orb within world boundaries
+    constrainMassOrbToWorld(massOrb) {
+        const position = new Vector3().fromArray(massOrb.position);
+        const velocity = new Vector3().fromArray(massOrb.velocity);
+        
+        // Calculate half-sizes for boundaries
+        const halfX = this.worldSize.x / 2;
+        const halfY = this.worldSize.y / 2;
+        const halfZ = this.worldSize.z / 2;
+        
+        // Check X boundaries
+        if (position.x < -halfX) {
+            position.x = -halfX;
+            velocity.x *= -0.8; // Bounce with energy loss
+        } else if (position.x > halfX) {
+            position.x = halfX;
+            velocity.x *= -0.8; // Bounce with energy loss
+        }
+        
+        // Check Y boundaries
+        if (position.y < -halfY) {
+            position.y = -halfY;
+            velocity.y *= -0.8; // Bounce with energy loss
+        } else if (position.y > halfY) {
+            position.y = halfY;
+            velocity.y *= -0.8; // Bounce with energy loss
+        }
+        
+        // Check Z boundaries
+        if (position.z < -halfZ) {
+            position.z = -halfZ;
+            velocity.z *= -0.8; // Bounce with energy loss
+        } else if (position.z > halfZ) {
+            position.z = halfZ;
+            velocity.z *= -0.8; // Bounce with energy loss
+        }
+        
+        // Update position and velocity
+        massOrb.position = position.toArray();
+        massOrb.velocity = velocity.toArray();
+    }
+    
+    // Check for collisions between mass orbs and players
+    checkMassPlayerCollisions(massOrb, massId, massOrbsToRemove) {
+        // Convert position and radius to Vector3 and number
+        const massPosition = new Vector3().fromArray(massOrb.position);
+        const massRadius = massOrb.radius;
+        
+        for (const [playerId, player] of this.players.entries()) {
+            // Skip if this is the player who ejected the mass and it was recently ejected
+            if (playerId === massOrb.ownerId && Date.now() - massOrb.creationTime < 1000) {
+                continue;
+            }
+            
+            // Check for collision
+            if (this.physics.sphereCollision(
+                massPosition, massRadius,
+                player.position, player.radius
+            )) {
+                // Player absorbs the mass
+                player.grow(massOrb.mass);
+                
+                // Mark mass orb for removal
+                massOrbsToRemove.push(massId);
+                
+                break; // Exit the loop since this mass orb is consumed
+            }
+        }
+    }
+    
+    // Check for collisions between mass orbs and viruses
+    checkMassVirusCollisions(massOrb, massId, massOrbsToRemove) {
+        // Only process if we have viruses
+        if (!this.viruses) return;
+        
+        // Convert position and radius to Vector3 and number
+        const massPosition = new Vector3().fromArray(massOrb.position);
+        const massRadius = massOrb.radius;
+        
+        for (const [virusId, virus] of this.viruses.entries()) {
+            // Convert virus position to Vector3
+            const virusPosition = new Vector3().fromArray(virus.position);
+            
+            // Check for collision
+            if (this.physics.sphereCollision(
+                massPosition, massRadius,
+                virusPosition, virus.radius
+            )) {
+                // Virus absorbs the mass
+                virus.mass += massOrb.mass;
+                virus.radius = Math.cbrt(virus.radius ** 3 + massOrb.mass);
+                
+                // Update virus in game state
+                this.io.emit('virusUpdated', {
+                    id: virusId,
+                    position: virus.position,
+                    mass: virus.mass,
+                    radius: virus.radius
+                });
+                
+                // Mark mass orb for removal
+                massOrbsToRemove.push(massId);
+                
+                break; // Exit the loop since this mass orb is consumed
+            }
+        }
     }
 }
 

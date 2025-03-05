@@ -1,5 +1,3 @@
-// Updated Game initialization with mouse capture integration
-
 import { THREE, OrbitControls, WebGL } from '../lib/three-instance.js';
 import { Player } from './player.js';
 import { Food } from './food.js';
@@ -7,6 +5,7 @@ import { CameraController } from './camera.js';
 import { PhysicsSystem } from './physics.js';
 import { RenderSystem } from './rendering.js';
 import { Virus } from './virus.js';
+import { MassOrb } from './mass.js';
 
 export class Game {
     constructor(config) {
@@ -31,6 +30,9 @@ export class Game {
         
         // Add viruses collection
         this.viruses = new Map();
+        
+        // Add mass orbs collection
+        this.massOrbs = new Map();
         
         // Initialize systems
         this.initThree();
@@ -267,6 +269,11 @@ export class Game {
             food.update(deltaTime);
         }
         
+        // Update mass orbs
+        for (const massOrb of this.massOrbs.values()) {
+            massOrb.update(deltaTime);
+        }
+        
         // Update physics (collision detection) - now passing viruses
         this.physicsSystem.update(deltaTime, this.players, this.foods, this.localPlayerId, this.viruses);
         
@@ -392,6 +399,21 @@ export class Game {
         if (event.key === ' ' && !event.repeat) {
             // Space bar for splitting
             this.socketManager.emit('splitPlayer');
+            console.log('Split command sent to server');
+        } else if (event.key === 'e' && !event.repeat) {
+            // 'e' key for ejecting mass
+            this.socketManager.emit('ejectMass');
+            console.log('Eject mass command sent to server');
+        } else if (event.key === 'c' && !event.repeat) {
+            // 'c' key for changing camera view
+            this.cameraController.toggleCameraMode();
+        } else if (event.key === 'l' && !event.repeat) {
+            // 'l' key for toggling pointer lock
+            if (document.pointerLockElement === this.renderer.domElement) {
+                document.exitPointerLock();
+            } else {
+                this.renderer.domElement.requestPointerLock();
+            }
         }
     }
     
@@ -463,6 +485,11 @@ export class Game {
         // Update viruses if provided in game state
         if (gameState.viruses) {
             this.updateViruses(gameState.viruses);
+        }
+        
+        // Update mass orbs if provided in game state
+        if (gameState.massOrbs) {
+            this.updateMassOrbs(gameState.massOrbs);
         }
     }
     
@@ -674,5 +701,69 @@ export class Game {
                 this.addVirus(data);
             }
         });
+    }
+    
+    // Add method for mass orbs
+    addMassOrb(orbData) {
+        // Create the mass orb with the provided data
+        const orb = new MassOrb({
+            id: orbData.id,
+            ownerId: orbData.ownerId,
+            position: orbData.position,
+            velocity: orbData.velocity,
+            mass: orbData.mass,
+            radius: orbData.radius,
+            color: orbData.color,
+            creationTime: orbData.creationTime
+        });
+        
+        // Add to the mass orbs collection
+        this.massOrbs.set(orb.id, orb);
+        
+        // Add to the scene
+        this.scene.add(orb.mesh);
+        
+        console.log(`Added mass orb ${orb.id} to game`);
+        return orb;
+    }
+    
+    // Update mass orbs
+    updateMassOrbs(orbData) {
+        // Track existing mass orbs to detect removed ones
+        const existingIds = new Set(this.massOrbs.keys());
+        
+        // Update or add mass orbs
+        for (const data of orbData) {
+            const id = data.id;
+            existingIds.delete(id);
+            
+            if (this.massOrbs.has(id)) {
+                // Update existing mass orb
+                this.massOrbs.get(id).updateFromServer(data);
+            } else {
+                // Add new mass orb
+                this.addMassOrb(data);
+            }
+        }
+        
+        // Remove mass orbs that no longer exist
+        for (const id of existingIds) {
+            this.removeMassOrb(id);
+        }
+    }
+    
+    // Remove a mass orb from the game
+    removeMassOrb(id) {
+        const massOrb = this.massOrbs.get(id);
+        if (massOrb) {
+            // Remove from scene
+            this.scene.remove(massOrb.mesh);
+            
+            // Clean up resources
+            massOrb.dispose();
+            
+            // Remove from collection
+            this.massOrbs.delete(id);
+        }
     }
 }
