@@ -33,8 +33,8 @@ export class Game {
         this.initSystems();
         this.initLocalPlayer();
         
-        // Setup pointer lock listener
-        window.addEventListener('pointerlockchange', this.onPointerLockChange.bind(this));
+        // Add our new setupInputHandlers call
+        this.setupInputHandlers();
         
         // Add UI indicator for mouse capture
         this.createMouseCaptureIndicator();
@@ -68,14 +68,14 @@ export class Game {
         // Set up renderer with minimal settings for better performance
         try {
             this.renderer = new THREE.WebGLRenderer({ 
-                antialias: false, // Disable antialiasing for performance
-                alpha: false,     // Disable alpha for performance
+                antialias: true,  // Enable antialiasing for better visual quality
+                alpha: true,      // Allow alpha channel if you need transparency
                 canvas: document.createElement('canvas'),
                 powerPreference: 'high-performance'
             });
             
             console.log('WebGL renderer created successfully');
-            this.renderer.setPixelRatio(1); // Use lower pixel ratio for performance
+            this.renderer.setPixelRatio(window.devicePixelRatio); // Use device pixel ratio for higher-res rendering
             this.renderer.setSize(window.innerWidth, window.innerHeight);
             this.container.innerHTML = ''; // Clear any previous content
             this.container.appendChild(this.renderer.domElement);
@@ -115,11 +115,8 @@ export class Game {
         // Rendering system for visual effects
         this.renderSystem = new RenderSystem(this.scene, this.renderer);
         
-        // Create game boundaries
-        this.createBoundaries();
-        
-        // Add a test object to confirm rendering is working
-        this.addTestObject();
+        // Remove the call to create the old green cube border
+        // this.createBoundaries();
     }
     
     createMouseCaptureIndicator() {
@@ -188,6 +185,13 @@ export class Game {
             username: this.username,
             color: this.localPlayer.color.getHexString()
         });
+        
+        // Create a "blob" geometry and attach it to the player so it moves with them
+        const blobGeometry = new THREE.SphereGeometry(2, 16, 16);
+        const blobMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+        const blobMesh = new THREE.Mesh(blobGeometry, blobMaterial);
+        blobMesh.position.set(0, 3, 0);
+        this.localPlayer.mesh.add(blobMesh);
     }
     
     addCoordinateHelpers() {
@@ -195,33 +199,35 @@ export class Game {
         const axesHelper = new THREE.AxesHelper(5);
         this.scene.add(axesHelper);
         
-        // Add grid helper
-        const gridHelper = new THREE.GridHelper(100, 100);
+        // Make the grid 5x bigger: from 100 => 500
+        const gridHelper = new THREE.GridHelper(500, 500);
         this.scene.add(gridHelper);
     }
     
     createBoundaries() {
-        // Create a wireframe box to represent game boundaries
-        const geometry = new THREE.BoxGeometry(100, 100, 100);
-        const edges = new THREE.EdgesGeometry(geometry);
-        const material = new THREE.LineBasicMaterial({ color: 0x00ff00 });
-        this.boundaries = new THREE.LineSegments(edges, material);
-        this.scene.add(this.boundaries);
+        // Remove or comment out the old wireframe box
+        /*
+        // const geometry = new THREE.BoxGeometry(100, 100, 100);
+        // const edges = new THREE.EdgesGeometry(geometry);
+        // const material = new THREE.LineBasicMaterial({ color: 0x00ff00 });
+        // this.boundaries = new THREE.LineSegments(edges, material);
+        // this.scene.add(this.boundaries);
+        */
+        
+        // Instead, create a more visible circular border that's distinct from the grid
+        const borderGeometry = new THREE.RingGeometry(245, 250, 64); // ring for a 500x500 map
+        const borderMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000, side: THREE.DoubleSide });
+        const borderMesh = new THREE.Mesh(borderGeometry, borderMaterial);
+        borderMesh.rotation.x = -Math.PI / 2; // lay it flat
+        borderMesh.position.y = 0.1;         // slightly above the grid
+        this.scene.add(borderMesh);
     }
     
     addTestObject() {
-        // Add a bright, visible test object with simpler material
-        const geometry = new THREE.BoxGeometry(5, 5, 5);
-        const material = new THREE.MeshBasicMaterial({ 
-            color: 0xff00ff, // Bright magenta color
-            wireframe: true
-        });
-        this.testCube = new THREE.Mesh(geometry, material);
-        this.testCube.position.set(0, 5, 0); // Position above the origin
-        this.scene.add(this.testCube);
-        
-        // Log that the test object was added
-        console.log('Test object added to scene');
+        // Either remove this function entirely or leave it empty if not needed
+        /*
+        // Original code was removed to avoid the purple test object
+        */
     }
     
     update() {
@@ -477,5 +483,27 @@ export class Game {
             Math.random(),
             Math.random()
         );
+    }
+    
+    /**
+     * Sets up the main input event handlers for mouse, keyboard, pointer locking, etc.
+     */
+    setupInputHandlers() {
+        // Pointer lock listener
+        window.addEventListener('pointerlockchange', this.onPointerLockChange.bind(this));
+
+        // Keyboard events
+        window.addEventListener('keydown', this.handleKeyDown.bind(this));
+        window.addEventListener('keyup', this.handleKeyUp.bind(this));
+
+        // Mouse events
+        window.addEventListener('mousemove', this.handleMouseMove.bind(this));
+        window.addEventListener('mousedown', this.handleClick.bind(this));
+
+        // Prevent default right-click context menu so right-click can be used for "boost"
+        window.addEventListener('contextmenu', (event) => event.preventDefault());
+
+        // Handle window resize
+        window.addEventListener('resize', this.onWindowResize.bind(this));
     }
 }
