@@ -122,27 +122,15 @@ export class PhysicsSystem {
     }
     
     enforceEntityBoundary(entity) {
-        // Clamp X position
-        if (entity.position.x < this.minX + entity.radius) {
-            entity.position.x = this.minX + entity.radius;
-            if (entity.mesh) entity.mesh.position.x = entity.position.x;
-        } else if (entity.position.x > this.maxX - entity.radius) {
-            entity.position.x = this.maxX - entity.radius;
-            if (entity.mesh) entity.mesh.position.x = entity.position.x;
-        }
-        
-        // Clamp Z position
-        if (entity.position.z < this.minZ + entity.radius) {
-            entity.position.z = this.minZ + entity.radius;
-            if (entity.mesh) entity.mesh.position.z = entity.position.z;
-        } else if (entity.position.z > this.maxZ - entity.radius) {
-            entity.position.z = this.maxZ - entity.radius;
-            if (entity.mesh) entity.mesh.position.z = entity.position.z;
+        // Boundary restrictions removed - player can move freely across the entire map
+        // Just update the mesh position to match the entity position
+        if (entity.mesh) {
+            entity.mesh.position.copy(entity.position);
         }
     }
     
     enforceBoundary(player) {
-        this.enforceEntityBoundary(player);
+        // No boundary enforcement - player can move freely
         
         // Update the player's mesh and label if they exist
         if (player.mesh) {
