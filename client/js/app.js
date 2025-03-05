@@ -81,12 +81,20 @@ function gameLoop(timestamp) {
     animationFrameId = requestAnimationFrame(gameLoop);
 }
 
-// Update server time in HH:MM format
+// Update server time in 12-hour format with AM/PM and seconds
 function updateServerTime() {
     const now = new Date();
-    const hours = String(now.getHours()).padStart(2, '0');
+    let hours = now.getHours();
     const minutes = String(now.getMinutes()).padStart(2, '0');
-    document.getElementById('server-time').textContent = `${hours}:${minutes}`;
+    const seconds = String(now.getSeconds()).padStart(2, '0');
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    
+    // Convert to 12-hour format
+    hours = hours % 12;
+    hours = hours ? hours : 12; // the hour '0' should be '12'
+    hours = String(hours).padStart(2, '0');
+    
+    document.getElementById('server-time').textContent = `${hours}:${minutes}:${seconds} ${ampm}`;
 }
 
 // Start the game with the given username
