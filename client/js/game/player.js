@@ -10,7 +10,7 @@ export class Player {
         this.rotation = new THREE.Quaternion();
         this.scale = new THREE.Vector3(1, 1, 1);
         this.color = config.color || new THREE.Color(0xffffff);
-        this.moveSpeed = 10; // Units per second
+        this.moveSpeed = 13; // Increased from 10 to 13 (30% increase)
         this.mass = config.mass || 1; // Initial mass
         this.radius = config.radius || 1; // Initial radius
         
@@ -132,7 +132,7 @@ export class Player {
         
         // Scale the move speed based on mass in increments of 10
         const massTier = Math.floor(this.mass / 10);
-        this.moveSpeed = 10 / (1 + massTier * 0.3);
+        this.moveSpeed = 13 / (1 + massTier * 0.3); // Increased from 10 to 13 (30% increase)
         
         // Update water drop animation
         this.animateWaterDrop(deltaTime);
