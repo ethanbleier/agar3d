@@ -83,6 +83,54 @@ export class Player {
         
         // Scale the move speed based on mass (larger players move slower)
         this.moveSpeed = 10 / Math.sqrt(this.mass);
+        
+        // Handle pulse animation after splitting
+        if (this.pulseTime > 0) {
+            // Calculate pulse progress (0 to 1)
+            const progress = 1 - (this.pulseTime / 0.3);
+            
+            // Interpolate between start and end scale
+            const currentScale = this.pulseStartScale.clone().lerp(this.pulseEndScale, progress);
+            this.sphereMesh.scale.copy(currentScale);
+            
+            // Decrease pulse time
+            this.pulseTime -= deltaTime;
+            
+            // Reset when complete
+            if (this.pulseTime <= 0) {
+                this.sphereMesh.scale.copy(this.scale);
+                this.pulseTime = 0;
+            }
+        }
+        
+        // Handle fragment ejection animation if this is a fragment
+        if (this.ejectionDirection && this.ejectionTime > 0) {
+            // Apply ejection force that decreases over time
+            const ejectionStrength = this.ejectionForce * (this.ejectionTime / 0.5);
+            const ejectionMovement = this.ejectionDirection.clone().multiplyScalar(ejectionStrength * deltaTime);
+            this.position.add(ejectionMovement);
+            
+            // Decrease ejection time
+            this.ejectionTime -= deltaTime;
+            
+            // Scale effect during ejection
+            const scaleEffect = 1 + (0.2 * (this.ejectionTime / 0.5));
+            this.sphereMesh.scale.set(
+                this.scale.x * scaleEffect,
+                this.scale.y * scaleEffect,
+                this.scale.z * scaleEffect
+            );
+            
+            // Add slight rotation for visual effect
+            this.mesh.rotateOnAxis(new THREE.Vector3(0, 1, 0), deltaTime * 2);
+            
+            // If ejection is complete, reset
+            if (this.ejectionTime <= 0) {
+                this.ejectionDirection = null;
+                this.ejectionTime = 0;
+                this.sphereMesh.scale.copy(this.scale);
+            }
+        }
     }
     
     move(direction, deltaTime) {
@@ -128,13 +176,45 @@ export class Player {
     }
     
     split() {
-        // This will be handled by the server
-        // Client-side anticipation can be added here
-    }
-    
-    boost() {
-        // This will be handled by the server
-        // Client-side anticipation can be added here
+        // Only split if we have enough mass
+        if (this.mass < 2) {
+            return null;
+        }
+
+        // Halve the mass for splitting (visual effect only, server will sync)
+        const newMass = this.mass / 2;
+        this.mass = newMass;
+        this.updateSize();
+        
+        // Add a small scale animation to the parent cell
+        const originalScale = this.scale.clone();
+        this.sphereMesh.scale.set(
+            originalScale.x * 1.2,
+            originalScale.y * 1.2,
+            originalScale.z * 1.2
+        );
+        
+        // Add a pulsing animation to the parent cell
+        this.pulseTime = 0.3; // Duration in seconds
+        this.pulseStartScale = originalScale.clone().multiplyScalar(1.2);
+        this.pulseEndScale = originalScale.clone();
+        
+        // Determine ejection direction based on current rotation
+        const ejectionDir = new THREE.Vector3(0, 0, -1);
+        ejectionDir.applyQuaternion(this.rotation).normalize();
+
+        // Calculate the spawn position for the new fragment
+        const spawnPosition = this.position.clone().add(
+            ejectionDir.clone().multiplyScalar(this.radius + 0.5)
+        );
+
+        // Return fragment info for potential local visualization
+        // The actual game logic is handled by the server
+        return {
+            position: spawnPosition,
+            direction: ejectionDir,
+            mass: newMass
+        };
     }
     
     updateFromServer(position, rotation, scale) {

@@ -12,9 +12,9 @@ class ServerPlayer {
         this.color = config.color;
         
         // Physics properties
-        this.velocity = new Vector3(0, 0, 0);
-        this.mass = 1; // Initial mass
-        this.radius = 1; // Initial radius
+        this.velocity = config.velocity || new Vector3(0, 0, 0);
+        this.mass = config.mass || 1; // Initial mass
+        this.radius = config.radius || 1; // Initial radius
         this.maxSpeed = 10; // Maximum movement speed
         
         // Game stats
@@ -22,11 +22,36 @@ class ServerPlayer {
         this.foodEaten = 0;
         this.playersEaten = 0;
         this.timeAlive = 0; // Time alive in seconds
+        
+        // Fragment properties for split cells
+        this.isFragment = config.isFragment || false;
+        this.parentId = config.parent || null;
+        
+        // If this is a recently split fragment, apply extra force for ejection
+        if (this.isFragment) {
+            // The split force will decay over time in the update method
+            this.splitForce = 20; // Initial force
+            this.splitForceDecay = 2; // Force reduction per second
+        }
     }
     
     update(deltaTime) {
         // Update position based on velocity
         this.position.add(this.velocity.clone().multiplyScalar(deltaTime));
+        
+        // Handle split fragment force for newly split cells
+        if (this.isFragment && this.splitForce > 0) {
+            // Get normalized velocity direction
+            const direction = this.velocity.clone().normalize();
+            
+            // Apply additional force in the same direction
+            const additionalForce = direction.multiplyScalar(this.splitForce * deltaTime);
+            this.position.add(additionalForce);
+            
+            // Decay the split force over time
+            this.splitForce -= this.splitForceDecay * deltaTime;
+            if (this.splitForce < 0) this.splitForce = 0;
+        }
         
         // Apply drag to gradually slow down
         this.velocity.multiplyScalar(0.95);
@@ -97,9 +122,41 @@ class ServerPlayer {
     }
     
     split() {
-        // To be implemented
-        // Will create a new player object with half the mass
-        // and return it to be added to the game
+        // Only split if we have enough mass
+        if (this.mass < 2) {
+            return null;
+        }
+
+        // Halve the mass for splitting
+        const newMass = this.mass / 2;
+        this.mass = newMass;
+        this.updateSize();
+
+        // Determine ejection direction based on current rotation
+        const ejectionDir = new Vector3(0, 0, -1);
+        ejectionDir.applyQuaternion(this.rotation).normalize();
+
+        // Calculate the spawn position for the new fragment
+        // Place it slightly in front of the current player
+        const spawnPosition = this.position.clone().add(
+            ejectionDir.clone().multiplyScalar(this.radius + 0.5)
+        );
+
+        // Create a new player configuration for the fragment
+        const fragmentConfig = {
+            id: `${this.id}_fragment_${Date.now()}`,
+            username: this.username,
+            position: spawnPosition,
+            color: this.color,
+            // Initial speed boost in the ejection direction
+            velocity: ejectionDir.clone().multiplyScalar(20),
+            mass: newMass,
+            isFragment: true,
+            parent: this.id
+        };
+
+        // Return fragment configuration to be added to the game
+        return fragmentConfig;
     }
     
     boost() {

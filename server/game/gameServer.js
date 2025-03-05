@@ -11,11 +11,11 @@ class GameServer {
         this.io = io;
         
         // Game settings
-        this.worldSize = { x: 100, y: 100, z: 100 }; // World boundaries
+        this.worldSize = { x: 500, y: 500, z: 500 }; // Match client world size
         this.maxPlayers = 50;
-        this.maxFood = 500;
-        this.minFood = 300;
-        this.foodSpawnRate = 5; // Food items per second
+        this.maxFood = 1000;  // Increase max food
+        this.minFood = 800;   // Increase min food
+        this.foodSpawnRate = 20; // Increase food spawn rate
         this.tickRate = 60; // Updates per second
         
         // Game state
@@ -134,8 +134,30 @@ class GameServer {
         const player = this.players.get(playerId);
         if (!player || player.mass < 2) return;
         
-        // Implement splitting logic (will be added in the future)
-        console.log(`Player ${player.username} (${playerId}) attempted to split`);
+        // Call the player's split method to get new fragment configuration
+        const fragmentConfig = player.split();
+        
+        // If split was successful (returned a valid config)
+        if (fragmentConfig) {
+            // Create a new player from the fragment config
+            const fragmentPlayer = new ServerPlayer(fragmentConfig);
+            
+            // Add fragment to the game with a unique ID
+            this.players.set(fragmentConfig.id, fragmentPlayer);
+            
+            // Initialize the fragment's physics properties
+            if (fragmentConfig.velocity) {
+                fragmentPlayer.velocity = fragmentConfig.velocity;
+            }
+            
+            // Notify all clients about the new fragment
+            this.io.emit('playerSplit', {
+                parentId: playerId,
+                fragment: fragmentPlayer.toClientData()
+            });
+            
+            console.log(`Player ${player.username} (${playerId}) split successfully, created fragment ${fragmentConfig.id}`);
+        }
     }
     
     handlePlayerBoost(playerId) {
@@ -308,6 +330,8 @@ class GameServer {
         
         // Notify all players of new food
         this.io.emit('foodSpawned', food.toClientData());
+        
+        return food;
     }
     
     sendGameState(playerId) {
@@ -383,11 +407,12 @@ class GameServer {
     }
     
     getRandomPosition() {
-        // Get random position within world boundaries
+        // Get random position within world bounds
+        const margin = 10; // Keep food away from edges
         return new Vector3(
-            (Math.random() - 0.5) * this.worldSize.x,
-            (Math.random() - 0.5) * this.worldSize.y,
-            (Math.random() - 0.5) * this.worldSize.z
+            (Math.random() - 0.5) * (this.worldSize.x - margin * 2),
+            0, // Keep food on the ground plane
+            (Math.random() - 0.5) * (this.worldSize.z - margin * 2)
         );
     }
     

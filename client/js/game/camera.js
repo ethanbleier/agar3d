@@ -19,6 +19,18 @@ export class CameraController {
         this.minPitchAngle = -Math.PI / 3; // Limit looking down
         this.maxPitchAngle = Math.PI / 3;  // Limit looking up
         
+        // Camera mode
+        this.mode = 'follow'; // 'follow', 'firstPerson', 'orbit'
+        
+        // Add camera shake properties
+        this.shakeIntensity = 0;
+        this.shakeDuration = 0;
+        this.shakeElapsedTime = 0;
+        this.shakeOffset = new THREE.Vector3();
+        
+        // Setup orbit controls (for orbit mode)
+        // this.orbitControls = null;
+        
         // Set initial camera position
         this.camera.position.copy(this.offset);
         this.camera.lookAt(0, 0, 0);
@@ -94,7 +106,8 @@ export class CameraController {
         
         // Update camera angles based on mouse movement
         this.yawAngle -= event.movementX * this.mouseSensitivity;
-        this.pitchAngle -= event.movementY * this.mouseSensitivity;
+        // Invert the vertical mouse movement for a more natural feel
+        this.pitchAngle += event.movementY * this.mouseSensitivity;
         
         // Clamp pitch to avoid flipping
         this.pitchAngle = Math.max(this.minPitchAngle, Math.min(this.maxPitchAngle, this.pitchAngle));
@@ -136,6 +149,9 @@ export class CameraController {
     }
     
     followPlayer(playerPosition, playerRotation, deltaTime) {
+        // Update camera shake
+        this.updateShake(deltaTime);
+        
         // Store the target position (player position)
         this.targetPosition.copy(playerPosition);
         
@@ -152,23 +168,29 @@ export class CameraController {
             // Calculate the target camera position
             const targetCameraPosition = new THREE.Vector3().copy(playerPosition).add(offsetVec);
             
+            // Add shake offset if active
+            targetCameraPosition.add(this.shakeOffset);
+            
             // Smoothly interpolate to the new position
             this.camera.position.lerp(targetCameraPosition, this.smoothFactor);
             
-            // Make camera look at player position
-            this.camera.lookAt(this.targetPosition);
+            // Look at player's position
+            this.camera.lookAt(playerPosition);
         } else {
-            // When pointer is not locked, use simple follow camera
-            // Calculate target position (player position + offset)
+            // Not pointer locked - default follow mode
+            // Calculate camera position based on player position and fixed offset
             const targetCameraPosition = new THREE.Vector3().copy(playerPosition).add(
-                this.offset.clone().multiplyScalar(this.zoomFactor)
+                new THREE.Vector3(0, this.offset.y, this.offset.z).multiplyScalar(this.zoomFactor)
             );
+            
+            // Add shake offset if active
+            targetCameraPosition.add(this.shakeOffset);
             
             // Smooth camera movement
             this.camera.position.lerp(targetCameraPosition, this.smoothFactor);
             
-            // Make camera look at player position
-            this.camera.lookAt(this.targetPosition);
+            // Look at player position
+            this.camera.lookAt(playerPosition);
         }
     }
     
@@ -265,5 +287,35 @@ export class CameraController {
                 document.body.removeChild(messageElement);
             }
         }, duration);
+    }
+    
+    // Add a new camera shake effect
+    addShake(intensity, duration) {
+        this.shakeIntensity = intensity;
+        this.shakeDuration = duration;
+        this.shakeElapsedTime = 0;
+    }
+    
+    // Update camera shake effect
+    updateShake(deltaTime) {
+        if (this.shakeDuration > 0) {
+            this.shakeElapsedTime += deltaTime;
+            
+            // Calculate shake strength based on remaining time
+            const strength = this.shakeIntensity * (1 - this.shakeElapsedTime / this.shakeDuration);
+            
+            // Generate random shake offset
+            this.shakeOffset.set(
+                (Math.random() * 2 - 1) * strength,
+                (Math.random() * 2 - 1) * strength * 0.5, // Less vertical shake
+                (Math.random() * 2 - 1) * strength
+            );
+            
+            // End shake when duration is over
+            if (this.shakeElapsedTime >= this.shakeDuration) {
+                this.shakeDuration = 0;
+                this.shakeOffset.set(0, 0, 0);
+            }
+        }
     }
 }
