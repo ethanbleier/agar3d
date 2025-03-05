@@ -1,6 +1,5 @@
 // Socket.io client setup
-
-import io from 'socket.io-client';
+// No import needed - we're using the global io object from the CDN
 
 export class SocketManager {
     constructor() {
@@ -8,8 +7,11 @@ export class SocketManager {
         this.id = null;
         this.connected = false;
         this.eventListeners = {};
+        this.reconnectionAttempts = 0;
+        this.maxReconnectionAttempts = 10;
         // Automatically determine the server URL based on current location
         this.serverUrl = this.determineServerUrl();
+        console.log('SocketManager initialized with server URL:', this.serverUrl);
     }
     
     // Helper to determine the appropriate server URL
@@ -17,29 +19,67 @@ export class SocketManager {
         const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
         const host = window.location.hostname;
         
+        // Always use port 3000 for the game server regardless of the client port
+        // This ensures all clients connect to the same server instance
+        const serverPort = '3000';
+        
         // If we're running locally
         if (host === 'localhost' || host === '127.0.0.1') {
-            return 'http://localhost:3000';
+            return `http://${host}:${serverPort}`;
         }
         
-        // For preview or production, use same hostname but port 3000
-        return `${protocol}//${host}:3000`;
+        // For preview or production, use same hostname but always port 3000
+        return `${protocol}//${host}:${serverPort}`;
     }
     
     connect() {
         // Initialize socket connection with more resilient configuration
         console.log("Attempting to connect to:", this.serverUrl);
+        
+        // Generate a unique session ID to help with reconnections
+        const sessionId = localStorage.getItem('socketSessionId') || 
+                           Math.random().toString(36).substring(2, 15) + 
+                           Math.random().toString(36).substring(2, 15);
+        
+        // Store session ID in localStorage
+        localStorage.setItem('socketSessionId', sessionId);
+        
         this.socket = io(this.serverUrl, {
-            transports: ['polling', 'websocket'],
+            transports: ['websocket', 'polling'],
             reconnectionAttempts: 10,
             reconnectionDelay: 1000,
             timeout: 20000,
-            autoConnect: true
+            autoConnect: true,
+            query: {
+                sessionId: sessionId
+            },
+            withCredentials: true,
+            forceNew: false
         });
         
         // Add error handling for connection issues
         this.socket.on('connect_error', (error) => {
             console.error('Connection error:', error.message);
+            this.reconnectionAttempts++;
+            
+            // Display more details about the connection attempt
+            console.warn(`Connection attempt ${this.reconnectionAttempts}/${this.maxReconnectionAttempts} failed`);
+            
+            if (this.reconnectionAttempts >= this.maxReconnectionAttempts) {
+                console.error('Maximum reconnection attempts reached, please refresh the page');
+                
+                // Display error message to user
+                const messageElement = document.getElementById('messages');
+                if (messageElement) {
+                    messageElement.innerHTML = `
+                        <div class="message error">
+                            <p>Connection to server failed after multiple attempts.</p>
+                            <p>Please refresh the page to try again.</p>
+                        </div>
+                    `;
+                }
+            }
+            
             this.triggerEvent('connect_error', error);
         });
         
@@ -47,6 +87,7 @@ export class SocketManager {
         this.socket.on('connect', () => {
             this.connected = true;
             this.id = this.socket.id;
+            this.reconnectionAttempts = 0;
             console.log('Connected to server with ID:', this.id);
             
             // Trigger event listeners
@@ -77,6 +118,12 @@ export class SocketManager {
         this.socket.on('playerLeft', (id) => {
             console.log('Player left:', id);
             this.triggerEvent('playerLeft', id);
+        });
+        
+        // Player count update
+        this.socket.on('playerCount', (data) => {
+            console.log('Player count update:', data);
+            this.triggerEvent('playerCount', data);
         });
         
         // Game state update (positions, sizes, etc.)

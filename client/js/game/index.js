@@ -605,14 +605,38 @@ export class Game {
     
     // Game state updates from server
     updateGameState(gameState) {
+        // Keep track of current player IDs to detect disconnected players
+        const currentPlayerIds = new Set();
+        
         // Update players
         for (const playerData of gameState.players) {
             this.updatePlayer(playerData);
+            currentPlayerIds.add(playerData.id);
         }
+        
+        // Check for disconnected players that are not in the current game state
+        for (const [playerId, player] of this.players.entries()) {
+            if (!currentPlayerIds.has(playerId) && playerId !== this.localPlayerId) {
+                // Player is not in the current game state and is not the local player
+                console.log('Player no longer in game state, removing:', playerId);
+                this.removePlayer(playerId);
+            }
+        }
+        
+        // Keep track of current food IDs
+        const currentFoodIds = new Set();
         
         // Update foods
         for (const foodData of gameState.foods) {
             this.updateFood(foodData);
+            currentFoodIds.add(foodData.id);
+        }
+        
+        // Check for consumed food that is not in the current game state
+        for (const foodId of this.foods.keys()) {
+            if (!currentFoodIds.has(foodId)) {
+                this.removeFood(foodId);
+            }
         }
         
         // Update viruses if provided in game state
@@ -633,14 +657,26 @@ export class Game {
             // Update existing player
             const player = this.players.get(id);
             if (id !== this.localPlayerId) { // Don't override local player's position
-                player.updateFromServer(position, rotation, scale);
+                // Ensure player is not below the floor (minimum Y = 0)
+                const adjustedPosition = position ? [...position] : null;
+                if (adjustedPosition && adjustedPosition[1] < 0) {
+                    adjustedPosition[1] = 0; // Set Y to floor level if below
+                }
+                
+                player.updateFromServer(adjustedPosition, rotation, scale);
             }
         } else {
             // Create new player
+            const newPosition = new THREE.Vector3().fromArray(position);
+            // Ensure player is not below the floor (minimum Y = 0)
+            if (newPosition.y < 0) {
+                newPosition.y = 0; // Set Y to floor level if below
+            }
+            
             const newPlayer = new Player({
                 id,
                 username,
-                position: new THREE.Vector3().fromArray(position),
+                position: newPosition,
                 color: new THREE.Color(color)
             });
             
@@ -920,6 +956,17 @@ export class Game {
     
     // Add this new method to set up socket event handlers
     setupSocketEvents() {
+        // Player connection events
+        this.socketManager.on('playerJoined', (data) => {
+            console.log('Player joined the game:', data);
+            this.addPlayer(data);
+        });
+        
+        this.socketManager.on('playerLeft', (id) => {
+            console.log('Player left the game:', id);
+            this.removePlayer(id);
+        });
+        
         // Handle player split event
         this.socketManager.on('playerSplit', (data) => {
             this.handlePlayerSplit(data);
@@ -933,8 +980,40 @@ export class Game {
         this.socketManager.on('massConsumed', (massId) => {
             this.removeMassOrb(massId);
         });
+
+        // Handle virus events
+        this.socketManager.on('virusSpawned', (virusData) => {
+            this.addVirus(virusData);
+        });
+        
+        this.socketManager.on('virusConsumed', (id) => {
+            this.removeVirus(id);
+        });
+        
+        // Display server messages in the UI
+        this.socketManager.on('serverMessage', (message) => {
+            this.displayServerMessage(message);
+        });
         
         // Handle other socket events as needed
+    }
+    
+    // Display server messages in the UI
+    displayServerMessage(message) {
+        const messagesElement = document.getElementById('messages');
+        if (messagesElement) {
+            const messageElement = document.createElement('div');
+            messageElement.className = `message ${message.type || 'info'}`;
+            messageElement.textContent = message.message;
+            messagesElement.appendChild(messageElement);
+            
+            // Auto-remove message after 5 seconds
+            setTimeout(() => {
+                if (messageElement.parentNode === messagesElement) {
+                    messagesElement.removeChild(messageElement);
+                }
+            }, 5000);
+        }
     }
     
     // Handle player split event from the server

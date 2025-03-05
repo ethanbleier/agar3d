@@ -1,6 +1,12 @@
 // Centralized three.js imports to prevent duplicate instances
-import * as THREE from 'three';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+// Use the existing imported modules from node_modules
+// import * as THREE from 'three';
+// import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+
+// Create references to use three.js - we need to add the script tags to the HTML
+const THREE = window.THREE || {};
+// To use OrbitControls, we need to add the script in index.html
+const OrbitControls = window.THREE ? window.THREE.OrbitControls : undefined;
 
 // Create WebGL detection utilities directly
 const WebGL = {
