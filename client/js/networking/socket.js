@@ -9,13 +9,15 @@ export class SocketManager {
         this.eventListeners = {};
         this.reconnectionAttempts = 0;
         this.maxReconnectionAttempts = 10;
-        // Automatically determine the server URL based on current location
-        this.serverUrl = this.determineServerUrl();
+        // Use the proxied path instead of direct server URL
+        this.serverUrl = '/socket.io';
         console.log('SocketManager initialized with server URL:', this.serverUrl);
     }
     
-    // Helper to determine the appropriate server URL
+    // Helper to determine the appropriate server URL (no longer used with proxy)
     determineServerUrl() {
+        // We'll keep this method for backward compatibility
+        // but it won't be used with the new proxy setup
         const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
         const host = window.location.hostname;
         
@@ -34,7 +36,7 @@ export class SocketManager {
     
     connect() {
         // Initialize socket connection with more resilient configuration
-        console.log("Attempting to connect to:", this.serverUrl);
+        console.log("Attempting to connect to socket.io through proxy");
         
         // Generate a unique session ID to help with reconnections
         const sessionId = localStorage.getItem('socketSessionId') || 
@@ -44,7 +46,7 @@ export class SocketManager {
         // Store session ID in localStorage
         localStorage.setItem('socketSessionId', sessionId);
         
-        this.socket = io(this.serverUrl, {
+        this.socket = io({
             transports: ['websocket', 'polling'],
             reconnectionAttempts: 10,
             reconnectionDelay: 1000,

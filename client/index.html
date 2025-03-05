@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Agar3D - 3D Multiplayer Game</title>
+    <title>agar.ioooo</title>
     <meta name="description" content="A 3D multiplayer game inspired by Agar.io">
     <!-- Favicon -->
     <link rel="icon" href="/images/favicon.ico">
@@ -24,7 +24,7 @@
     <div id="start-screen" class="screen">
         <div class="start-container">
             <div class="logo-container">
-                <h1 class="game-title">gummy<span>.io</span></h1>
+                <h1 class="game-title">blob<span>.</span><span class="domain-name"></span><span></span></h1>
                 <div class="title-glow"></div>
             </div>
             
@@ -47,17 +47,17 @@
                         </div>
                         <div class="instruction-item">
                             <span class="key-badge">W</span>
-                            <span>poop</span>
+                            <span>Dash</span>
                         </div>
                     </div>
                     <div class="instruction-column">
                         <div class="instruction-item">
                             <span class="key-badge">C</span>
-                            <span>Toggle Camera</span>
+                            <span>Toggle Camera View</span>
                         </div>
                         <div class="instruction-item">
                             <span class="key-badge">ESC / L</span>
-                            <span>Exit cursor lock</span>
+                            <span>Exit Cursor Lock</span>
                         </div>
                         <div class="instruction-item">
                             <span class="key-badge">🖱️</span>
@@ -72,7 +72,7 @@
                 </div>
             </div>
             
-            <div class="credits">by ethan bleier</div>
+            <div class="credits">by ethan</div>
         </div>
     </div>
     
@@ -91,8 +91,9 @@
             <div class="controls-info">
                 <div class="control-item">Mouse - Move Direction</div>
                 <div class="control-item">(Coming Soon) SPACE - Split</div>
-                <div class="control-item">W - poop</div>
+                <div class="control-item">W - Boost</div>
                 <div class="control-item">C - Toggle Camera View</div>
+                <div class="control-item">ESC / L - Open Game Menu</div>
             </div>
             
             <div class="credits">by ethan bleier</div>
@@ -104,6 +105,17 @@
         </div>
         
         <div id="messages" class="messages"></div>
+    </div>
+    
+    <!-- Escape Menu Overlay - hidden by default -->
+    <div id="escape-menu" class="escape-menu hidden">
+        <div class="escape-menu-content">
+            <h2></h2>
+            <div class="menu-buttons">
+                <button id="resume-button" class="menu-button">Resume Game</button>
+                <button id="disconnect-button" class="menu-button">Disconnect</button>
+            </div>
+        </div>
     </div>
     
     <!-- Socket.io client library -->

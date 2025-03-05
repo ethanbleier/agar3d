@@ -39,6 +39,17 @@ export class Game {
         this.maxFood = 100;   // Maximum number of food items
         this.minFood = 50;    // Minimum number of food items
         
+        // Escape menu state
+        this.escapeMenuActive = false;
+        this.escapeMenu = document.getElementById('escape-menu');
+        this.resumeButton = document.getElementById('resume-button');
+        this.disconnectButton = document.getElementById('disconnect-button');
+        
+        // Ensure escape menu is hidden initially
+        if (this.escapeMenu) {
+            this.escapeMenu.classList.add('hidden');
+        }
+        
         // Initialize systems
         this.initThree();
         this.initSystems();
@@ -173,7 +184,7 @@ export class Game {
         indicator.style.fontSize = '12px';
         indicator.style.pointerEvents = 'none'; // Don't block clicks
         indicator.style.zIndex = '1000';
-        indicator.textContent = 'Click to capture mouse (L to toggle)';
+        indicator.textContent = 'Click to capture mouse (ESC or L to toggle menu)';
         document.body.appendChild(indicator);
     }
     
@@ -181,10 +192,10 @@ export class Game {
         const indicator = document.getElementById('mouse-capture-indicator');
         if (indicator) {
             if (this.pointerLocked) {
-                indicator.textContent = 'Mouse Captured (ESC or L to release)';
+                indicator.textContent = 'Mouse Captured (ESC or L to open menu)';
                 indicator.style.backgroundColor = 'rgba(0, 150, 0, 0.5)';
             } else {
-                indicator.textContent = 'Click to capture mouse (L to toggle)';
+                indicator.textContent = 'Click to capture mouse (ESC or L to toggle menu)';
                 indicator.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
             }
         }
@@ -200,6 +211,19 @@ export class Game {
         // Show camera mode message
         if (this.pointerLocked) {
             this.cameraController.showUIMessage('Mouse captured. Use WASD to move, mouse to look around.', 3000);
+            
+            // If escape menu is active, hide it when pointer is locked
+            if (this.escapeMenuActive) {
+                this.escapeMenuActive = false;
+                this.escapeMenu.classList.add('hidden');
+            }
+        } else {
+            // If pointer is unlocked but escape menu is not active, show it
+            // This handles the case when user presses ESC directly
+            if (!this.escapeMenuActive && this.isRunning) {
+                this.escapeMenuActive = true;
+                this.escapeMenu.classList.remove('hidden');
+            }
         }
     }
     
@@ -456,73 +480,25 @@ export class Game {
         
         // Handle special key presses
         if (event.key === 'w' && !event.repeat) {
-            // W for pooping
-            if (this.localPlayer && this.localPlayer.mass > 2) {  // Only poop if enough mass
-                // Get poop info from player
-                const splitInfo = this.localPlayer.split();
+            // W for boost
+            if (this.localPlayer && this.localPlayer.mass > this.localPlayer.boostCost) {
+                // Try to boost
+                const boostSuccess = this.localPlayer.boost();
                 
-                if (splitInfo) {
-                    // Send split command to server
-                    this.socketManager.emit('splitPlayer');
-                    console.log('Split command sent to server');
+                if (boostSuccess) {
+                    // Send boost command to server
+                    this.socketManager.emit('boostPlayer');
+                    console.log('Boost command sent to server');
                     
-                    // Add split particles for visual effect
-                    this.addSplitParticles(this.localPlayer.position, this.localPlayer.color);
+                    // Add boost particles for visual effect
+                    this.addBoostParticles(this.localPlayer.position, this.localPlayer.color);
                 }
-            }
-        } else if (event.key.toLowerCase() === 'w' && !event.repeat) {
-            // 'w' key for ejecting mass
-            if (this.localPlayer && this.localPlayer.mass > 1) {  // Only eject if enough mass
-                // Calculate eject direction based on mouse position
-                const ejectDir = this.calculateMouseDirection();
-                
-                // Create temporary visual mass orb
-                const orbMass = Math.min(this.localPlayer.mass * 0.1, 1);  // 10% of mass up to 1
-                const orbRadius = Math.cbrt(orbMass);
-                const orbPos = this.localPlayer.position.clone().add(
-                    ejectDir.multiplyScalar(this.localPlayer.radius + orbRadius)
-                );
-                
-                // Update local player visually
-                this.localPlayer.mass -= orbMass;
-                this.localPlayer.updateSize();
-                
-                // Create a temporary local mass orb for immediate visual feedback
-                const tempMassOrb = new MassOrb({
-                    id: 'temp_' + Date.now(),
-                    ownerId: this.localPlayerId,
-                    position: orbPos.toArray(),
-                    velocity: ejectDir.clone().multiplyScalar(20).toArray(),
-                    mass: orbMass,
-                    radius: orbRadius,
-                    color: this.localPlayer.color
-                });
-                
-                // Add to scene temporarily (will be replaced by server version)
-                this.scene.add(tempMassOrb.mesh);
-                
-                // Remove after a short delay (server will send the real one)
-                setTimeout(() => {
-                    this.scene.remove(tempMassOrb.mesh);
-                    tempMassOrb.dispose();
-                }, 200);
-                
-                // Send eject command to server
-                this.socketManager.emit('ejectMass', {
-                    direction: ejectDir.toArray(),
-                    position: orbPos.toArray(),
-                    mass: orbMass
-                });
-                console.log('Eject mass command sent to server');
             }
         } else if (event.key === 'c' && !event.repeat) {
             this.cameraController.toggleCameraMode();
-        } else if (event.key === 'l' && !event.repeat) {
-            if (document.pointerLockElement === this.renderer.domElement) {
-                document.exitPointerLock();
-            } else {
-                this.renderer.domElement.requestPointerLock();
-            }
+        } else if ((event.key === 'l' || event.key === 'Escape') && !event.repeat) {
+            // Toggle escape menu instead of just pointer lock
+            this.toggleEscapeMenu();
         }
     }
     
@@ -651,7 +627,7 @@ export class Game {
     }
     
     updatePlayer(playerData) {
-        const { id, username, position, rotation, scale, color } = playerData;
+        const { id, username, position, rotation, scale, color, mass, score } = playerData;
         
         if (this.players.has(id)) {
             // Update existing player
@@ -665,6 +641,17 @@ export class Game {
                 
                 player.updateFromServer(adjustedPosition, rotation, scale);
             }
+            
+            // Update mass and score for all players, including local player
+            if (mass !== undefined) {
+                player.mass = mass;
+                player.updateSize();
+            }
+            
+            // Update score if provided
+            if (score !== undefined) {
+                player.score = score;
+            }
         } else {
             // Create new player
             const newPosition = new THREE.Vector3().fromArray(position);
@@ -677,7 +664,9 @@ export class Game {
                 id,
                 username,
                 position: newPosition,
-                color: new THREE.Color(color)
+                color: new THREE.Color(color),
+                mass: mass || 1,
+                score: score || 0
             });
             
             // Add player mesh to the scene
@@ -777,6 +766,20 @@ export class Game {
 
         // Handle window resize
         window.addEventListener('resize', this.onWindowResize.bind(this));
+        
+        // Set up escape menu button event listeners
+        if (this.resumeButton && this.disconnectButton) {
+            // Use one-time setup with persistent handlers
+            const resumeHandler = this.resumeGame.bind(this);
+            const disconnectHandler = this.disconnectFromGame.bind(this);
+            
+            // Store references to the bound handlers for later removal
+            this.resumeButtonHandler = resumeHandler;
+            this.disconnectButtonHandler = disconnectHandler;
+            
+            this.resumeButton.addEventListener('click', resumeHandler);
+            this.disconnectButton.addEventListener('click', disconnectHandler);
+        }
     }
     
     // Method to spawn initial viruses
@@ -970,6 +973,11 @@ export class Game {
         // Handle player split event
         this.socketManager.on('playerSplit', (data) => {
             this.handlePlayerSplit(data);
+        });
+        
+        // Handle player boost event
+        this.socketManager.on('playerBoosted', (data) => {
+            this.handlePlayerBoost(data);
         });
         
         // Handle mass orb events
@@ -1200,5 +1208,167 @@ export class Game {
         this.scene.add(newFood.mesh);
         
         return newFood;
+    }
+
+    addBoostParticles(position, color) {
+        // Create a particle system for the boost effect
+        const particleCount = 50;
+        const particleGeometry = new THREE.BufferGeometry();
+        const particlePositions = new Float32Array(particleCount * 3);
+        const particleSizes = new Float32Array(particleCount);
+        
+        // Get player's backward direction (opposite of facing direction)
+        const backwardDirection = new THREE.Vector3(0, 0, 1);
+        if (this.localPlayer) {
+            backwardDirection.applyQuaternion(this.localPlayer.rotation);
+        }
+        
+        // Create particles in a cone shape behind the player
+        for (let i = 0; i < particleCount; i++) {
+            // Random position in a cone behind the player
+            const angle = Math.random() * Math.PI * 0.5 - Math.PI * 0.25; // -45 to +45 degrees
+            const distance = Math.random() * 3 + 1; // 1 to 4 units behind
+            
+            // Calculate direction with some randomness
+            const particleDir = backwardDirection.clone();
+            particleDir.applyAxisAngle(new THREE.Vector3(0, 1, 0), angle);
+            
+            // Set position
+            const particlePos = position.clone().add(
+                particleDir.multiplyScalar(distance)
+            );
+            
+            particlePositions[i * 3] = particlePos.x;
+            particlePositions[i * 3 + 1] = particlePos.y;
+            particlePositions[i * 3 + 2] = particlePos.z;
+            
+            // Random size
+            particleSizes[i] = Math.random() * 0.5 + 0.2;
+        }
+        
+        particleGeometry.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3));
+        particleGeometry.setAttribute('size', new THREE.BufferAttribute(particleSizes, 1));
+        
+        // Create particle material
+        const particleMaterial = new THREE.PointsMaterial({
+            color: color,
+            size: 0.5,
+            transparent: true,
+            opacity: 0.8,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false
+        });
+        
+        // Create particle system
+        const particleSystem = new THREE.Points(particleGeometry, particleMaterial);
+        this.scene.add(particleSystem);
+        
+        // Animate particles
+        const animateParticles = () => {
+            const positions = particleGeometry.attributes.position.array;
+            const sizes = particleGeometry.attributes.size.array;
+            
+            for (let i = 0; i < particleCount; i++) {
+                // Move particles outward and fade
+                const index = i * 3;
+                const dir = new THREE.Vector3(
+                    positions[index] - position.x,
+                    positions[index + 1] - position.y,
+                    positions[index + 2] - position.z
+                ).normalize();
+                
+                // Move particle
+                positions[index] += dir.x * 0.2;
+                positions[index + 1] += dir.y * 0.2;
+                positions[index + 2] += dir.z * 0.2;
+                
+                // Shrink particle
+                sizes[i] *= 0.95;
+            }
+            
+            particleGeometry.attributes.position.needsUpdate = true;
+            particleGeometry.attributes.size.needsUpdate = true;
+            
+            // Continue animation or remove when particles are too small
+            if (sizes[0] > 0.01) {
+                requestAnimationFrame(animateParticles);
+            } else {
+                this.scene.remove(particleSystem);
+                particleGeometry.dispose();
+                particleMaterial.dispose();
+            }
+        };
+        
+        // Start animation
+        animateParticles();
+    }
+
+    // Handle player boost event from the server
+    handlePlayerBoost(data) {
+        const { id, position, mass } = data;
+        
+        // Get the player that boosted
+        const player = this.players.get(id);
+        if (!player) {
+            console.error('Player not found for boost:', id);
+            return;
+        }
+        
+        // Update player mass
+        player.mass = mass;
+        player.updateSize();
+        
+        // Add boost particles for visual effect
+        this.addBoostParticles(player.position, player.color);
+        
+        // If this is the local player, we've already handled the visual effect
+        // Otherwise, we need to update the player's position from the server
+        if (id !== this.localPlayerId) {
+            player.position.set(position[0], position[1], position[2]);
+        }
+    }
+
+    // Toggle the escape menu
+    toggleEscapeMenu() {
+        this.escapeMenuActive = !this.escapeMenuActive;
+        
+        if (this.escapeMenuActive) {
+            // Show escape menu
+            this.escapeMenu.classList.remove('hidden');
+            
+            // Exit pointer lock if active
+            if (document.pointerLockElement === this.renderer.domElement) {
+                document.exitPointerLock();
+            }
+        } else {
+            // Hide escape menu
+            this.escapeMenu.classList.add('hidden');
+        }
+    }
+    
+    // Resume the game (hide menu and re-lock pointer)
+    resumeGame() {
+        this.escapeMenuActive = false;
+        this.escapeMenu.classList.add('hidden');
+        
+        // Re-lock the pointer
+        this.renderer.domElement.requestPointerLock();
+    }
+    
+    // Disconnect from the game and return to start screen
+    disconnectFromGame() {
+        // Hide escape menu
+        this.escapeMenuActive = false;
+        this.escapeMenu.classList.add('hidden');
+        
+        // Disconnect from server
+        this.socketManager.disconnect();
+        
+        // Show start screen
+        document.getElementById('start-screen').style.display = 'flex';
+        document.getElementById('game-ui').style.display = 'none';
+        
+        // Stop the game loop
+        this.isRunning = false;
     }
 }

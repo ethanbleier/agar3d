@@ -13,6 +13,7 @@ export class Player {
         this.moveSpeed = 13; // Increased from 10 to 13 (30% increase)
         this.mass = config.mass || 1; // Initial mass
         this.radius = config.radius || 1; // Initial radius
+        this.score = config.score || 0; // Initial score
         
         // Water drop animation parameters
         this.animationTime = 0;
@@ -20,6 +21,13 @@ export class Player {
         this.wobbleAmplitude = 0.1; // Amount of deformation
         this.originalVertices = []; // Store original vertex positions
         this.vertexNormals = []; // Store vertex normals for deformation
+        
+        // Boost parameters
+        this.boostCooldown = 0; // Cooldown timer for boost
+        this.boostDuration = 0; // Duration of current boost
+        this.isBoostActive = false; // Flag for boost state
+        this.boostMultiplier = 2.5; // Speed multiplier during boost
+        this.boostCost = 3; // Mass cost for boosting
         
         // Create mesh
         this.createMesh();
@@ -134,6 +142,21 @@ export class Player {
         const massTier = Math.floor(this.mass / 10);
         this.moveSpeed = 13 / (1 + massTier * 0.3); // Increased from 10 to 13 (30% increase)
         
+        // Update boost cooldown and duration
+        if (this.boostCooldown > 0) {
+            this.boostCooldown -= deltaTime;
+            if (this.boostCooldown < 0) this.boostCooldown = 0;
+        }
+        
+        // Handle active boost
+        if (this.isBoostActive) {
+            this.boostDuration -= deltaTime;
+            if (this.boostDuration <= 0) {
+                this.isBoostActive = false;
+                this.boostDuration = 0;
+            }
+        }
+        
         // Update water drop animation
         this.animateWaterDrop(deltaTime);
         
@@ -188,7 +211,8 @@ export class Player {
     
     move(direction, deltaTime) {
         // Apply movement based on direction and speed
-        const moveDelta = direction.clone().multiplyScalar(this.moveSpeed * deltaTime);
+        const effectiveSpeed = this.isBoostActive ? this.moveSpeed * this.boostMultiplier : this.moveSpeed;
+        const moveDelta = direction.clone().multiplyScalar(effectiveSpeed * deltaTime);
         this.position.add(moveDelta);
         
         // Boundary restrictions removed - player can move freely across the entire map
@@ -224,6 +248,30 @@ export class Player {
     grow(amount) {
         this.mass += amount;
         this.updateSize();
+    }
+    
+    boost() {
+        // Only boost if we have enough mass and not on cooldown
+        if (this.mass <= this.boostCost || this.boostCooldown > 0 || this.isBoostActive) {
+            return false;
+        }
+        
+        // Deduct mass cost
+        this.mass -= this.boostCost;
+        this.updateSize();
+        
+        // Activate boost
+        this.isBoostActive = true;
+        this.boostDuration = 0.5; // Boost lasts for 0.5 seconds
+        this.boostCooldown = 2.0; // 2 second cooldown before next boost
+        
+        // Add a pulsing animation to show boost
+        const originalScale = this.scale.clone();
+        this.pulseTime = 0.3; // Duration in seconds
+        this.pulseStartScale = originalScale.clone().multiplyScalar(0.8); // Compress slightly
+        this.pulseEndScale = originalScale.clone();
+        
+        return true;
     }
     
     split() {
