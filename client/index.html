@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agar3D - 3D Multiplayer Game</title>
+    <meta name="description" content="A 3D multiplayer game inspired by Agar.io">
+    <!-- Favicon -->
+    <link rel="icon" href="favicon.ico" type="image/x-icon">
+    <!-- Main Stylesheet -->
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <!-- Game container for Three.js canvas -->
+    <div id="game-container"></div>
+    
+    <!-- Start screen - will be shown initially -->
+    <div id="start-screen" class="screen">
+        <div class="start-container">
+            <h1>Agar3D</h1>
+            <p>A 3D multiplayer game inspired by Agar.io</p>
+            <div class="input-group">
+                <input type="text" id="username-input" placeholder="Enter your username" maxlength="15">
+                <button id="start-button">Play</button>
+            </div>
+            <div class="instructions">
+                <h2>How to Play</h2>
+                <ul>
+                    <li>Move: WASD or Arrow Keys</li>
+                    <li>Up/Down: Space / Shift</li>
+                    <li>Split: Space Bar</li>
+                    <li>Boost: Left Click</li>
+                    <li>Zoom: Mouse Wheel</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Game UI - will be shown during gameplay -->
+    <div id="game-ui" class="game-ui">
+        <div id="leaderboard" class="leaderboard">
+            <h3>Leaderboard</h3>
+            <ol id="leaderboard-list"></ol>
+        </div>
+        <div id="stats" class="stats">
+            <div>Mass: <span id="player-mass">1</span></div>
+            <div>Rank: <span id="player-rank">-</span></div>
+        </div>
+        <div id="messages" class="messages"></div>
+    </div>
+    
+    <!-- Socket.io client library -->
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    
+    <!-- Three.js libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.min.js"></script>
+    
+    <!-- Main application script - Use module to enable ES6 imports -->
+    <script type="module" src="js/app.js"></script>
+</body>
+</html>
