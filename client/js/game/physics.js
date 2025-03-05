@@ -6,124 +6,107 @@ import { THREE } from '../lib/three-instance.js';
 export class PhysicsSystem {
     constructor() {
         this.tempVector = new THREE.Vector3();
-        this.boundarySize = 50; // Half the size of the game boundaries
+        this.boundarySize = 250; // Half the size of the game world
     }
     
-    update(deltaTime, players, foods, localPlayerId) {
-        // Get local player for collision detection
+    update(deltaTime, players, foods, localPlayerId, viruses) {
+        // Check for player-food collisions
+        this.checkPlayerFoodCollisions(players, foods, localPlayerId);
+        
+        // Check for player-player collisions
+        this.checkPlayerPlayerCollisions(players, localPlayerId);
+        
+        // Check for player-virus collisions if viruses are provided
+        if (viruses && viruses.size > 0) {
+            this.checkPlayerVirusCollisions(players, viruses, localPlayerId);
+        }
+        
+        // Check boundary collisions for local player
+        const localPlayer = players.get(localPlayerId);
+        if (localPlayer) {
+            this.enforceBoundary(localPlayer);
+        }
+    }
+    
+    checkPlayerFoodCollisions(players, foods, localPlayerId) {
         const localPlayer = players.get(localPlayerId);
         if (!localPlayer) return;
         
-        // Check for collisions with food
-        this.checkFoodCollisions(localPlayer, foods);
-        
-        // Client-side prediction for player movement
-        this.applyMovementConstraints(localPlayer);
-        
-        // Check for collisions with other players
-        // Note: In a real implementation, the server would handle this
-        // This is just for visualization/prediction
-        this.checkPlayerCollisions(localPlayer, players);
-    }
-    
-    checkFoodCollisions(player, foods) {
-        // Check if the player can eat any food
-        for (const [foodId, food] of foods.entries()) {
-            if (this.sphereCollision(
-                player.position, player.radius,
-                food.position, food.scale.x
-            )) {
-                // Don't actually remove the food here - just notify the server
-                // The server will confirm and broadcast the food consumption
-                // This is just for client-side prediction
-                food.mesh.visible = false;
+        foods.forEach((food, foodId) => {
+            // Simple distance-based collision detection
+            const distance = localPlayer.position.distanceTo(food.position);
+            
+            // If the player's radius plus the food's radius is greater than the distance,
+            // they are colliding
+            if (distance < (localPlayer.radius + food.radius)) {
+                // Consume the food
+                localPlayer.grow(food.mass);
+                
+                // Mark food for removal
+                // The actual removal happens in the game class
+                food.consumed = true;
+                food.consumedBy = localPlayerId;
             }
-        }
+        });
     }
     
-    checkPlayerCollisions(localPlayer, players) {
-        // Check collisions with other players
-        // Note: This is just for client-side prediction
-        for (const [playerId, otherPlayer] of players.entries()) {
-            // Skip collision with self
-            if (playerId === localPlayer.id) continue;
+    checkPlayerPlayerCollisions(players, localPlayerId) {
+        const localPlayer = players.get(localPlayerId);
+        if (!localPlayer) return;
+        
+        players.forEach((otherPlayer, otherPlayerId) => {
+            // Skip self-collision
+            if (otherPlayerId === localPlayerId) return;
             
-            // Check if players collide
-            if (this.sphereCollision(
-                localPlayer.position, localPlayer.radius,
-                otherPlayer.position, otherPlayer.radius
-            )) {
-                // Determine if localPlayer can eat the other player
-                // In Agar.io, a player can eat another if it's about 20% larger
-                if (localPlayer.mass > otherPlayer.mass * 1.2) {
-                    // Client-side prediction - don't actually remove the player
-                    // Just visually indicate the collision
-                    otherPlayer.mesh.material.opacity = 0.5;
+            // Calculate distance between players
+            const distance = localPlayer.position.distanceTo(otherPlayer.position);
+            
+            // Check for collision
+            if (distance < (localPlayer.radius + otherPlayer.radius)) {
+                // Determine which player is larger
+                if (localPlayer.mass > otherPlayer.mass * 1.1) {
+                    // Local player consumes the other player
+                    // This will be handled by the server
+                } else if (otherPlayer.mass > localPlayer.mass * 1.1) {
+                    // Local player is consumed by the other player
+                    // This will be handled by the server
+                } else {
+                    // Players are too similar in size to consume each other
+                    // Apply a slight repulsive force
+                    const repulsionDirection = new THREE.Vector3()
+                        .subVectors(localPlayer.position, otherPlayer.position)
+                        .normalize();
+                    
+                    const repulsionForce = 0.5 * deltaTime;
+                    localPlayer.position.addScaledVector(repulsionDirection, repulsionForce);
                 }
-                else if (otherPlayer.mass > localPlayer.mass * 1.2) {
-                    // Local player might get eaten
-                    // Just a visual indicator
-                    localPlayer.mesh.material.opacity = 0.5;
-                }
-                else {
-                    // Players bounce off each other
-                    this.resolveCollision(localPlayer, otherPlayer);
-                }
-            } else {
-                // Reset opacity
-                otherPlayer.mesh.material.opacity = 0.9;
-                localPlayer.mesh.material.opacity = 0.9;
             }
-        }
+        });
     }
     
-    applyMovementConstraints(player) {
-        // Constrain player within boundaries
-        player.position.x = Math.max(-this.boundarySize, Math.min(this.boundarySize, player.position.x));
-        player.position.y = Math.max(-this.boundarySize, Math.min(this.boundarySize, player.position.y));
-        player.position.z = Math.max(-this.boundarySize, Math.min(this.boundarySize, player.position.z));
+    checkPlayerVirusCollisions(players, viruses, localPlayerId) {
+        const localPlayer = players.get(localPlayerId);
+        if (!localPlayer) return;
+        
+        viruses.forEach((virus, virusId) => {
+            // Use the virus's own collision detection method
+            if (virus.checkCollision(localPlayer)) {
+                // The virus's onCollision method will handle the player popping
+                // and other effects. The game class will handle removing the virus
+                // if necessary.
+            }
+        });
     }
     
-    sphereCollision(pos1, radius1, pos2, radius2) {
-        // Calculate squared distance between centers
-        const dx = pos2.x - pos1.x;
-        const dy = pos2.y - pos1.y;
-        const dz = pos2.z - pos1.z;
-        const distanceSquared = dx * dx + dy * dy + dz * dz;
+    enforceBoundary(player) {
+        // Keep the player within the game boundaries
+        const boundaryRadius = this.boundarySize - player.radius;
         
-        // Check if spheres intersect
-        const sumRadii = radius1 + radius2;
-        return distanceSquared <= sumRadii * sumRadii;
-    }
-    
-    resolveCollision(player1, player2) {
-        // Calculate direction from player1 to player2
-        this.tempVector.subVectors(player2.position, player1.position);
-        const distance = this.tempVector.length();
-        
-        // Normalize direction
-        this.tempVector.normalize();
-        
-        // Calculate how much the spheres overlap
-        const sumRadii = player1.radius + player2.radius;
-        const overlapDistance = sumRadii - distance;
-        
-        // Only resolve if there's an overlap
-        if (overlapDistance > 0) {
-            // Calculate push factor based on relative mass
-            const totalMass = player1.mass + player2.mass;
-            const push1 = (player2.mass / totalMass) * overlapDistance * 0.5;
-            const push2 = (player1.mass / totalMass) * overlapDistance * 0.5;
-            
-            // Push player1 away
-            player1.position.sub(
-                this.tempVector.clone().multiplyScalar(push1)
-            );
-            
-            // Push player2 away
-            player2.position.add(
-                this.tempVector.clone().multiplyScalar(push2)
-            );
+        const distanceFromCenter = player.position.length();
+        if (distanceFromCenter > boundaryRadius) {
+            // Push the player back towards the center
+            const direction = player.position.clone().normalize();
+            player.position.copy(direction.multiplyScalar(boundaryRadius));
         }
     }
 }

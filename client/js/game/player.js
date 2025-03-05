@@ -11,14 +11,21 @@ export class Player {
         this.scale = new THREE.Vector3(1, 1, 1);
         this.color = config.color || new THREE.Color(0xffffff);
         this.moveSpeed = 10; // Units per second
-        this.mass = 1; // Initial mass
-        this.radius = 1; // Initial radius
+        this.mass = config.mass || 1; // Initial mass
+        this.radius = config.radius || 1; // Initial radius
         
         // Create mesh
         this.createMesh();
         
         // Create username label
         this.createLabel();
+
+        // If this is a fragment from a virus pop
+        if (config.isFragment) {
+            this.ejectionDirection = config.ejectionDirection;
+            this.ejectionForce = config.ejectionForce;
+            this.ejectionTime = 0.5; // Duration of ejection force in seconds
+        }
     }
     
     createMesh() {
@@ -99,21 +106,25 @@ export class Player {
         this.mesh.getWorldQuaternion(this.rotation);
     }
     
-    grow(amount) {
-        // Increase mass and update size
-        this.mass += amount;
-        this.radius = Math.cbrt(this.mass); // Cube root for 3D scaling
+    updateSize() {
+        // Update radius based on mass
+        this.radius = Math.cbrt(this.mass);
         
-        // Scale the mesh
+        // Update scale
         this.scale.set(this.radius, this.radius, this.radius);
         this.sphereMesh.scale.copy(this.scale);
         
-        // Scale the label with the player but not too much
+        // Update label position and scale
         if (this.label) {
-            const labelScale = Math.min(2 * this.radius, 4); // Cap label scaling
+            const labelScale = Math.min(2 * this.radius, 4);
             this.label.scale.set(labelScale, labelScale * 0.25, 1);
-            this.label.position.y = 1.5 * this.radius; // Keep above the sphere
+            this.label.position.y = 1.5 * this.radius;
         }
+    }
+    
+    grow(amount) {
+        this.mass += amount;
+        this.updateSize();
     }
     
     split() {

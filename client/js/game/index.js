@@ -6,6 +6,7 @@ import { Food } from './food.js';
 import { CameraController } from './camera.js';
 import { PhysicsSystem } from './physics.js';
 import { RenderSystem } from './rendering.js';
+import { Virus } from './virus.js';
 
 export class Game {
     constructor(config) {
@@ -28,6 +29,9 @@ export class Game {
         this.mouseMovement = new THREE.Vector2();
         this.pointerLocked = false;
         
+        // Add viruses collection
+        this.viruses = new Map();
+        
         // Initialize systems
         this.initThree();
         this.initSystems();
@@ -38,6 +42,9 @@ export class Game {
         
         // Add UI indicator for mouse capture
         this.createMouseCaptureIndicator();
+        
+        // Log the number of viruses spawned
+        console.log(`Game initialized with ${this.viruses.size} viruses`);
         
         // Start the game
         this.isRunning = true;
@@ -118,8 +125,14 @@ export class Game {
         // Rendering system for visual effects
         this.renderSystem = new RenderSystem(this.scene, this.renderer);
         
-        // Remove the call to create the old green cube border
-        // this.createBoundaries();
+        // Define the world size property for boundaries and spawning
+        this.worldSize = 500; // Full world size (matches the grid helper)
+        
+        // Initialize viruses - fixed the spawnInitialViruses method to use the proper world size
+        this.spawnInitialViruses(15); // Spawn 15 initial viruses
+        
+        // Create boundaries
+        this.createBoundaries();
     }
     
     createMouseCaptureIndicator() {
@@ -254,8 +267,8 @@ export class Game {
             food.update(deltaTime);
         }
         
-        // Update physics (collision detection)
-        this.physicsSystem.update(deltaTime, this.players, this.foods, this.localPlayerId);
+        // Update physics (collision detection) - now passing viruses
+        this.physicsSystem.update(deltaTime, this.players, this.foods, this.localPlayerId, this.viruses);
         
         // Send player position and rotation to server
         this.socketManager.emit('updatePosition', {
@@ -270,6 +283,45 @@ export class Game {
             this.localPlayer.rotation,
             deltaTime
         );
+        
+        // Update viruses
+        this.viruses.forEach(virus => {
+            virus.update(deltaTime);
+            
+            // Check for collisions with the local player
+            if (this.localPlayer && virus.checkCollision(this.localPlayer)) {
+                if (virus.onCollision(this.localPlayer, this)) {
+                    this.removeVirus(virus.id);
+                    // Spawn a new virus elsewhere after a delay
+                    setTimeout(() => this.spawnNewVirus(), 5000);
+                }
+            }
+            
+            // Check for collisions with other players
+            this.players.forEach(player => {
+                if (virus.checkCollision(player)) {
+                    if (virus.onCollision(player, this)) {
+                        this.removeVirus(virus.id);
+                        // Spawn a new virus elsewhere after a delay
+                        setTimeout(() => this.spawnNewVirus(), 5000);
+                    }
+                }
+            });
+        });
+        
+        // Update player fragments with ejection physics
+        this.players.forEach(player => {
+            if (player.ejectionDirection && player.ejectionTime > 0) {
+                // Calculate movement based on ejection
+                const force = player.ejectionForce * (player.ejectionTime / 0.5);
+                player.position.addScaledVector(player.ejectionDirection, force * deltaTime);
+                player.mesh.position.copy(player.position);
+                player.label.position.copy(player.position).add(new THREE.Vector3(0, player.radius + 0.5, 0));
+                
+                // Decrease ejection time
+                player.ejectionTime -= deltaTime;
+            }
+        });
         
         // Call render with deltaTime
         this.render(deltaTime);
@@ -407,6 +459,11 @@ export class Game {
         for (const foodData of gameState.foods) {
             this.updateFood(foodData);
         }
+        
+        // Update viruses if provided in game state
+        if (gameState.viruses) {
+            this.updateViruses(gameState.viruses);
+        }
     }
     
     updatePlayer(playerData) {
@@ -508,5 +565,114 @@ export class Game {
 
         // Handle window resize
         window.addEventListener('resize', this.onWindowResize.bind(this));
+    }
+    
+    // Method to spawn initial viruses
+    spawnInitialViruses(count) {
+        console.log(`Spawning ${count} initial viruses`);
+        
+        for (let i = 0; i < count; i++) {
+            // Create random positions within 80% of world bounds to avoid edge spawning
+            const position = new THREE.Vector3(
+                (Math.random() - 0.5) * this.worldSize * 0.8,
+                0, // Keep on the ground plane
+                (Math.random() - 0.5) * this.worldSize * 0.8
+            );
+            
+            // Create the virus with a unique ID
+            const virusId = 'virus_' + crypto.randomUUID();
+            this.addVirus({
+                id: virusId,
+                position: position
+            });
+            
+            console.log(`Spawned virus ${virusId} at position:`, position);
+        }
+    }
+    
+    // Add a virus to the game
+    addVirus(virusData) {
+        // Convert position array to Vector3 if needed
+        let position = virusData.position;
+        if (Array.isArray(position)) {
+            position = new THREE.Vector3().fromArray(position);
+        }
+        
+        // Create the virus with the provided data
+        const virus = new Virus({
+            id: virusData.id,
+            position: position,
+            radius: virusData.radius || 2.5
+        });
+        
+        // Add to the viruses collection
+        this.viruses.set(virus.id, virus);
+        
+        // Add to the scene
+        this.scene.add(virus.mesh);
+        
+        console.log(`Added virus ${virus.id} to game`);
+        return virus;
+    }
+    
+    // Remove a virus from the game
+    removeVirus(id) {
+        if (this.viruses.has(id)) {
+            const virus = this.viruses.get(id);
+            this.scene.remove(virus.mesh);
+            virus.dispose();
+            this.viruses.delete(id);
+        }
+    }
+    
+    // Spawn a new virus at a random position
+    spawnNewVirus() {
+        const position = new THREE.Vector3(
+            (Math.random() - 0.5) * this.worldSize * 0.8,
+            0,
+            (Math.random() - 0.5) * this.worldSize * 0.8
+        );
+        
+        this.addVirus({
+            id: 'virus_' + Date.now(),
+            position: position
+        });
+    }
+    
+    // Add method for player fragments (for virus popping)
+    addPlayerFragment(fragmentConfig) {
+        // Create a new player instance for the fragment
+        const fragment = new Player(fragmentConfig);
+        
+        // Add it to the scene
+        this.scene.add(fragment.mesh);
+        this.scene.add(fragment.label);
+        
+        // Add to players collection
+        this.players.set(fragment.id, fragment);
+        
+        // Apply ejection impulse
+        if (fragmentConfig.ejectionDirection && fragmentConfig.ejectionForce) {
+            // Store ejection data for movement in the update loop
+            fragment.ejectionDirection = fragmentConfig.ejectionDirection;
+            fragment.ejectionForce = fragmentConfig.ejectionForce;
+            fragment.ejectionTime = 0.5; // Duration of ejection force in seconds
+        }
+        
+        return fragment;
+    }
+    
+    // Handle virus updates from server if needed
+    updateViruses(virusData) {
+        virusData.forEach(data => {
+            if (this.viruses.has(data.id)) {
+                // Update existing virus
+                const virus = this.viruses.get(data.id);
+                virus.updateFromServer(new THREE.Vector3(data.position.x, data.position.y, data.position.z));
+            } else {
+                // Add new virus
+                this.addVirus(data);
+            }
+        });
     }
 }
