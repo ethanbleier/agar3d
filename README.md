@@ -155,11 +155,10 @@ agar3d/
 
 ## Relevant links
 
-- [Three.js Documentation](https://threejs.org/docs/)
+- [Three.js Docs](https://threejs.org/docs/)
 - [Three.js Examples](https://threejs.org/examples/)
-- [Original Agar.io Game](https://agar.io/)
-- [WebGL Fundamentals](https://webglfundamentals.org/)
-- [Socket.io Documentation](https://socket.io/docs/v4/)
+- [WebGL](https://webglfundamentals.org/)
+- [Socket.io Docs](https://socket.io/docs/v4/)
 - [Three.js](https://threejs.org/)
 - [Socket.io](https://socket.io/)
 - [Express](https://expressjs.com/)
