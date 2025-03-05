@@ -31,11 +31,15 @@ export class Player {
     createMesh() {
         // Create sphere for the player
         const geometry = new THREE.SphereGeometry(1, 32, 32);
+        
+        // Create material with more reflectivity and slight transparency
         const material = new THREE.MeshPhongMaterial({
             color: this.color,
-            shininess: 30,
+            shininess: 100,
             transparent: true,
-            opacity: 0.9
+            opacity: 0.85,
+            reflectivity: 1.0,
+            specular: new THREE.Color(0x444444)
         });
         
         this.mesh = new THREE.Group(); // Container for all player objects
@@ -138,11 +142,7 @@ export class Player {
         const moveDelta = direction.clone().multiplyScalar(this.moveSpeed * deltaTime);
         this.position.add(moveDelta);
         
-        // Apply movement bounds
-        const bounds = 50; // Half the size of the game boundaries
-        this.position.x = Math.max(-bounds, Math.min(bounds, this.position.x));
-        this.position.y = Math.max(-bounds, Math.min(bounds, this.position.y));
-        this.position.z = Math.max(-bounds, Math.min(bounds, this.position.z));
+        // Boundary restrictions removed - player can move freely across the entire map
     }
     
     lookAt(direction) {

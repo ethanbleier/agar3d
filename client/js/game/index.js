@@ -75,7 +75,7 @@ export class Game {
         
         // Set up THREE.js scene
         this.scene = new THREE.Scene();
-        this.scene.background = new THREE.Color(0x000040); // Dark blue background
+        this.scene.background = new THREE.Color(0x000022); // Darker blue background
         
         // Add ambient light
         const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
@@ -106,7 +106,7 @@ export class Game {
             this.container.appendChild(this.renderer.domElement);
             
             // Force a clear to ensure WebGL context is working
-            this.renderer.setClearColor(0x000040, 1);
+            this.renderer.setClearColor(0x000022, 1);
             this.renderer.clear();
         } catch (e) {
             console.error('Error creating WebGL renderer:', e);
@@ -215,13 +215,6 @@ export class Game {
             username: this.username,
             color: this.localPlayer.color.getHexString()
         });
-        
-        // Create a "blob" geometry and attach it to the player so it moves with them
-        const blobGeometry = new THREE.SphereGeometry(2, 16, 16);
-        const blobMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
-        const blobMesh = new THREE.Mesh(blobGeometry, blobMaterial);
-        blobMesh.position.set(0, 3, 0);
-        this.localPlayer.mesh.add(blobMesh);
     }
     
     addCoordinateHelpers() {
@@ -229,26 +222,20 @@ export class Game {
         const axesHelper = new THREE.AxesHelper(5);
         this.scene.add(axesHelper);
         
-        // Make the grid 5x bigger: from 100 => 500
-        const gridHelper = new THREE.GridHelper(500, 500);
-        this.scene.add(gridHelper);
+        // Grid removed as per request
     }
     
     createBoundaries() {
         // Create a visual representation of the world boundaries
-        const worldSize = this.worldSize;
+        // Using a much larger world size to allow unrestricted movement
+        const worldSize = this.worldSize * 10; // Make the world 10x larger
         
-        // Create a grid helper that spans the entire world
-        const gridHelper = new THREE.GridHelper(worldSize * 2, 20, 0x444444, 0x222222);
-        gridHelper.position.y = 0;
-        this.scene.add(gridHelper);
-        
-        // Create boundary walls - now at the exact edge of the world
+        // Create boundary walls - now at a much greater distance
         const wallGeometry = new THREE.BoxGeometry(1, 5, worldSize * 2);
         const wallMaterial = new THREE.MeshBasicMaterial({ 
             color: 0x8888ff,
             transparent: true,
-            opacity: 0.3
+            opacity: 0.1 // Make them more transparent
         });
         
         // East wall
@@ -273,9 +260,8 @@ export class Game {
         southWall.position.set(0, 2.5, worldSize);
         this.scene.add(southWall);
         
-        // Set physics boundaries to match visual boundaries
-        // TODO: Implement physics boundaries
-        console.warn('Physics boundaries not yet implemented');
+        // No physics boundaries - player can move freely
+        console.log('Physics boundaries removed - player can move freely across the entire map');
     }
     
     addTestObject() {

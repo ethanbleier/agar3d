@@ -83,6 +83,16 @@ export class RenderSystem {
             dirLight.shadow.mapSize.width = 512;
             dirLight.shadow.mapSize.height = 512;
             this.scene.add(dirLight);
+            
+            // Add a second light source to enhance reflections
+            const secondaryLight = new THREE.DirectionalLight(0xaaccff, 0.5);
+            secondaryLight.position.set(-15, 10, -10);
+            this.scene.add(secondaryLight);
+            
+            // Add a point light near the camera for specular highlights
+            const pointLight = new THREE.PointLight(0xffffff, 0.3);
+            pointLight.position.set(0, 10, 0);
+            this.scene.add(pointLight);
         }
     }
     

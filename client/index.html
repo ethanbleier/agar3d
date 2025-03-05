@@ -6,7 +6,12 @@
     <title>Agar3D - 3D Multiplayer Game</title>
     <meta name="description" content="A 3D multiplayer game inspired by Agar.io">
     <!-- Favicon -->
-    <link rel="icon" href="public/images/favicon.ico">
+    <link rel="icon" href="/images/favicon.ico">
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
 
     <!-- Main Stylesheet -->
     <link rel="stylesheet" href="css/styles.css">
@@ -18,37 +23,87 @@
     <!-- Start screen - will be shown initially -->
     <div id="start-screen" class="screen">
         <div class="start-container">
-            <h1>gummy.io</h1>
+            <div class="logo-container">
+                <h1 class="game-title">gummy<span>.io</span></h1>
+                <div class="title-glow"></div>
+            </div>
+            
             <div class="input-group">
                 <input type="text" id="username-input" placeholder="Enter your username" maxlength="15">
-                <button id="start-button">Play</button>
+                <button id="start-button">Play Now</button>
             </div>
+            
             <div class="instructions">
                 <h2>How to Play</h2>
-                <ul>
-                    <li>Move: Point mouse where you want to go</li>
-                    <li>Split: Space Bar</li>
-                    <li>W: Shoot mass</li>
-                    <li>Zoom: Mouse Wheel</li>
-                    <br><br>
-                    <li>Virus: Eat the virus to split</li>
-                    <li>Eat other players to grow</li>
-                    <li>Grow to become the largest cell</li>
-                </ul>
+                <div class="instructions-grid">
+                    <div class="instruction-column">
+                        <div class="instruction-item">
+                            <span class="key-badge">Mouse</span>
+                            <span>Move Direction</span>
+                        </div>
+                        <div class="instruction-item">
+                            <span class="key-badge">Space</span>
+                            <span>Split</span>
+                        </div>
+                        <div class="instruction-item">
+                            <span class="key-badge">W</span>
+                            <span>Shoot Mass</span>
+                        </div>
+                    </div>
+                    <div class="instruction-column">
+                        <div class="instruction-item">
+                            <span class="key-badge">C</span>
+                            <span>Toggle Camera</span>
+                        </div>
+                        <div class="instruction-item">
+                            <span class="key-badge">TAB</span>
+                            <span>Leaderboard</span>
+                        </div>
+                        <div class="instruction-item">
+                            <span class="key-badge">🖱️</span>
+                            <span>Zoom with Wheel</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="game-objective">
+                    <p>Absorb smaller players to grow. Avoid larger ones!</p>
+                    <p>Viruses split you when consumed - use them strategically!</p>
+                </div>
             </div>
+            
+            <div class="credits">by ethan bleier</div>
         </div>
     </div>
     
     <!-- Game UI - will be shown during gameplay -->
     <div id="game-ui" class="game-ui">
+        <div id="game-stats" class="game-stats-panel">
+            <div class="stats-header">
+                <span>FPS: <span id="fps-counter">0</span></span> | Server time: <span id="server-time">00:00</span>
+            </div>
+            <div class="stats-info">
+                <div class="stats-item">Players Online: <span id="players-count">0</span></div>
+                <div class="stats-item">Mass: <span id="player-mass">0</span></div>
+                <div class="stats-item">Score: <span id="player-score">0</span></div>
+            </div>
+            
+            <div class="controls-info">
+                <div class="control-item">Mouse - Move Direction</div>
+                <div class="control-item">SPACE - Split</div>
+                <div class="control-item">W - Shoot Mass</div>
+                <div class="control-item">TAB - Leaderboard</div>
+                <div class="control-item">C - Toggle Camera View</div>
+            </div>
+            
+            <div class="credits">by ethan bleier</div>
+        </div>
+        
         <div id="leaderboard" class="leaderboard">
             <h3>Leaderboard</h3>
             <ol id="leaderboard-list"></ol>
         </div>
-        <div id="stats" class="stats">
-            <div>Mass: <span id="player-mass">1</span></div>
-            <div>Rank: <span id="player-rank">-</span></div>
-        </div>
+        
         <div id="messages" class="messages"></div>
     </div>
     

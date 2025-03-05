@@ -7,6 +7,9 @@ import { THREE, OrbitControls } from './lib/three-instance.js';
 let game;
 let socketManager;
 let animationFrameId; // To store the animation frame ID
+let lastTimestamp = 0;
+let frameCount = 0;
+let lastFpsUpdate = 0;
 
 // Initialize the game when the DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
@@ -33,16 +36,57 @@ function init() {
         event.preventDefault();
         return false;
     });
+    
+    // Start a timer to update the server time
+    updateServerTime();
+    setInterval(updateServerTime, 1000);
 }
 
 // Game loop function that updates and renders the game
-function gameLoop() {
+function gameLoop(timestamp) {
+    // Calculate FPS
+    if (!lastTimestamp) {
+        lastTimestamp = timestamp;
+    }
+    
+    frameCount++;
+    const elapsed = timestamp - lastFpsUpdate;
+    
+    // Update FPS counter approximately every second
+    if (elapsed >= 1000) {
+        const fps = Math.round((frameCount * 1000) / elapsed);
+        document.getElementById('fps-counter').textContent = fps;
+        
+        // Reset for next update
+        lastFpsUpdate = timestamp;
+        frameCount = 0;
+        
+        // Also update player count if the game is running
+        if (game && game.players) {
+            document.getElementById('players-count').textContent = game.players.size;
+        }
+    }
+    
     if (game) {
-        console.log('Game loop running - update and render');
         game.update();
         game.render();
+        
+        // Update UI with player stats if local player exists
+        if (game.localPlayer) {
+            document.getElementById('player-mass').textContent = Math.floor(game.localPlayer.mass);
+            document.getElementById('player-score').textContent = Math.floor(game.localPlayer.score || 0);
+        }
     }
+    
     animationFrameId = requestAnimationFrame(gameLoop);
+}
+
+// Update server time in HH:MM format
+function updateServerTime() {
+    const now = new Date();
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    document.getElementById('server-time').textContent = `${hours}:${minutes}`;
 }
 
 // Start the game with the given username
@@ -68,13 +112,10 @@ function startGame(username) {
     
     console.log('Game initialized, starting game loop');
     
-    // Set up socket event listeners
-    setupSocketListeners();
-    
-    // Start game loop
-    if (animationFrameId) {
-        cancelAnimationFrame(animationFrameId);
-    }
+    // Start the game loop with timestamp
+    lastTimestamp = 0;
+    frameCount = 0;
+    lastFpsUpdate = 0;
     animationFrameId = requestAnimationFrame(gameLoop);
 }
 
