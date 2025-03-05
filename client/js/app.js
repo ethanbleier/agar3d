@@ -92,6 +92,19 @@ function setupSocketListeners() {
         game.updateGameState(gameState);
     });
     
+    socketManager.on('foodSpawned', (foodData) => {
+        game.addFood(foodData);
+    });
+    
+    socketManager.on('foodConsumed', (data) => {
+        game.removeFood(data.foodId);
+    });
+    
+    // Add handlers for player splitting
+    socketManager.on('playerSplit', (data) => {
+        game.handlePlayerSplit(data);
+    });
+    
     // Add handlers for virus events
     socketManager.on('virusSpawned', (virusData) => {
         game.addVirus(virusData);

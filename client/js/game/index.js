@@ -34,10 +34,18 @@ export class Game {
         // Add mass orbs collection
         this.massOrbs = new Map();
         
+        // Game configuration
+        this.worldSize = 100; // Size of the game world - this value is used for boundaries
+        this.maxFood = 100;   // Maximum number of food items
+        this.minFood = 50;    // Minimum number of food items
+        
         // Initialize systems
         this.initThree();
         this.initSystems();
         this.initLocalPlayer();
+        
+        // Set up socket event handlers
+        this.setupSocketEvents();
         
         // Add our new setupInputHandlers call
         this.setupInputHandlers();
@@ -45,8 +53,12 @@ export class Game {
         // Add UI indicator for mouse capture
         this.createMouseCaptureIndicator();
         
-        // Log the number of viruses spawned
-        console.log(`Game initialized with ${this.viruses.size} viruses`);
+        // Spawn initial viruses and food
+        this.spawnInitialViruses(10);
+        this.spawnInitialFood(this.minFood);
+        
+        // Log the number of viruses and food spawned
+        console.log(`Game initialized with ${this.viruses.size} viruses and ${this.foods.size} food items`);
         
         // Start the game
         this.isRunning = true;
@@ -223,22 +235,47 @@ export class Game {
     }
     
     createBoundaries() {
-        // Remove or comment out the old wireframe box
-        /*
-        // const geometry = new THREE.BoxGeometry(100, 100, 100);
-        // const edges = new THREE.EdgesGeometry(geometry);
-        // const material = new THREE.LineBasicMaterial({ color: 0x00ff00 });
-        // this.boundaries = new THREE.LineSegments(edges, material);
-        // this.scene.add(this.boundaries);
-        */
+        // Create a visual representation of the world boundaries
+        const worldSize = this.worldSize;
         
-        // Instead, create a more visible circular border that's distinct from the grid
-        const borderGeometry = new THREE.RingGeometry(245, 250, 64); // ring for a 500x500 map
-        const borderMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000, side: THREE.DoubleSide });
-        const borderMesh = new THREE.Mesh(borderGeometry, borderMaterial);
-        borderMesh.rotation.x = -Math.PI / 2; // lay it flat
-        borderMesh.position.y = 0.1;         // slightly above the grid
-        this.scene.add(borderMesh);
+        // Create a grid helper that spans the entire world
+        const gridHelper = new THREE.GridHelper(worldSize * 2, 20, 0x444444, 0x222222);
+        gridHelper.position.y = 0;
+        this.scene.add(gridHelper);
+        
+        // Create boundary walls - now at the exact edge of the world
+        const wallGeometry = new THREE.BoxGeometry(1, 5, worldSize * 2);
+        const wallMaterial = new THREE.MeshBasicMaterial({ 
+            color: 0x8888ff,
+            transparent: true,
+            opacity: 0.3
+        });
+        
+        // East wall
+        const eastWall = new THREE.Mesh(wallGeometry, wallMaterial);
+        eastWall.position.set(worldSize, 2.5, 0);
+        this.scene.add(eastWall);
+        
+        // West wall
+        const westWall = new THREE.Mesh(wallGeometry, wallMaterial);
+        westWall.position.set(-worldSize, 2.5, 0);
+        this.scene.add(westWall);
+        
+        // North wall (rotated)
+        const northWall = new THREE.Mesh(wallGeometry, wallMaterial);
+        northWall.rotation.y = Math.PI / 2;
+        northWall.position.set(0, 2.5, -worldSize);
+        this.scene.add(northWall);
+        
+        // South wall (rotated)
+        const southWall = new THREE.Mesh(wallGeometry, wallMaterial);
+        southWall.rotation.y = Math.PI / 2;
+        southWall.position.set(0, 2.5, worldSize);
+        this.scene.add(southWall);
+        
+        // Set physics boundaries to match visual boundaries
+        // TODO: Implement physics boundaries
+        console.warn('Physics boundaries not yet implemented');
     }
     
     addTestObject() {
@@ -251,45 +288,54 @@ export class Game {
     update() {
         // Calculate delta time
         const now = performance.now();
-        const deltaTime = (now - this.lastTime) / 1000; // Convert to seconds
+        const deltaTime = Math.min((now - this.lastTime) / 1000, 0.1); // Cap at 100ms
         this.lastTime = now;
         
-        if (!this.isRunning || !this.localPlayer) return;
+        if (!this.isRunning) return;
         
-        // Update player movement based on input
+        // Update player input
         this.updatePlayerInput(deltaTime);
         
-        // Update all players
-        for (const player of this.players.values()) {
+        // Update physics and get foods to remove
+        const foodsToRemove = this.physicsSystem.update(
+            deltaTime,
+            this.players,
+            this.foods,
+            this.localPlayerId,
+            this.viruses
+        );
+        
+        // Remove consumed foods
+        if (foodsToRemove && foodsToRemove.length > 0) {
+            foodsToRemove.forEach(foodId => {
+                this.removeFood(foodId);
+                
+                // Spawn a new food item to replace the consumed one after a delay
+                setTimeout(() => {
+                    if (this.foods.size < this.maxFood) {
+                        this.spawnNewFood();
+                    }
+                }, Math.random() * 2000 + 1000); // Random delay between 1-3 seconds
+            });
+        }
+        
+        // Update players
+        this.players.forEach(player => {
             player.update(deltaTime);
-        }
-        
-        // Update foods (rotation, etc.)
-        for (const food of this.foods.values()) {
-            food.update(deltaTime);
-        }
-        
-        // Update mass orbs
-        for (const massOrb of this.massOrbs.values()) {
-            massOrb.update(deltaTime);
-        }
-        
-        // Update physics (collision detection) - now passing viruses
-        this.physicsSystem.update(deltaTime, this.players, this.foods, this.localPlayerId, this.viruses);
-        
-        // Send player position and rotation to server
-        this.socketManager.emit('updatePosition', {
-            position: this.localPlayer.position.toArray(),
-            rotation: this.localPlayer.rotation.toArray(),
-            scale: this.localPlayer.scale.toArray()
         });
         
-        // Update camera to follow player
-        this.cameraController.followPlayer(
-            this.localPlayer.position, 
-            this.localPlayer.rotation,
-            deltaTime
-        );
+        // Update food
+        this.foods.forEach(food => {
+            food.update(deltaTime);
+        });
+        
+        // Check if we need to spawn more food
+        if (this.foods.size < this.minFood) {
+            // Spawn new food at a rate of about 1 per second
+            if (Math.random() < deltaTime) {
+                this.spawnNewFood();
+            }
+        }
         
         // Update viruses
         this.viruses.forEach(virus => {
@@ -315,6 +361,20 @@ export class Game {
                 }
             });
         });
+        
+        // Send player position and rotation to server
+        this.socketManager.emit('updatePosition', {
+            position: this.localPlayer.position.toArray(),
+            rotation: this.localPlayer.rotation.toArray(),
+            scale: this.localPlayer.scale.toArray()
+        });
+        
+        // Update camera to follow player
+        this.cameraController.followPlayer(
+            this.localPlayer.position, 
+            this.localPlayer.rotation,
+            deltaTime
+        );
         
         // Update player fragments with ejection physics
         this.players.forEach(player => {
@@ -356,39 +416,36 @@ export class Game {
     }
     
     updatePlayerInput(deltaTime) {
-        // Calculate movement direction based on keys and camera orientation
-        const moveDirection = new THREE.Vector3(0, 0, 0);
+        if (!this.localPlayer) return;
+
+        // Get camera's forward direction
+        const cameraForward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion);
+        cameraForward.y = 0; // Keep on xz plane
+        cameraForward.normalize();
         
-        // Get camera's forward and right vectors for movement relative to camera
-        const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion);
-        forward.y = 0; // Keep movement on the xz plane
-        forward.normalize();
+        // Get camera's right direction
+        const cameraRight = new THREE.Vector3(1, 0, 0).applyQuaternion(this.camera.quaternion);
+        cameraRight.y = 0; // Keep on xz plane
+        cameraRight.normalize();
         
-        const right = new THREE.Vector3(1, 0, 0).applyQuaternion(this.camera.quaternion);
-        right.y = 0; // Keep movement on the xz plane
-        right.normalize();
+        // Calculate movement direction based on mouse position
+        const moveDirection = new THREE.Vector3();
         
-        // Apply movement based on WASD/arrow keys
-        if (this.keys['w'] || this.keys['ArrowUp']) moveDirection.add(forward);
-        if (this.keys['s'] || this.keys['ArrowDown']) moveDirection.sub(forward);
-        if (this.keys['a'] || this.keys['ArrowLeft']) moveDirection.sub(right);
-        if (this.keys['d'] || this.keys['ArrowRight']) moveDirection.add(right);
+        // Add forward movement (always move forward, speed affected by vertical mouse position)
+        const forwardFactor = 1.0 - Math.abs(this.mousePosition.y) * 0.5; // Reduce speed when looking far up/down
+        moveDirection.addScaledVector(cameraForward, forwardFactor);
         
-        // Vertical movement
-        if (this.keys[' ']) moveDirection.y += 1; // Space to move up
-        if (this.keys['Shift']) moveDirection.y -= 1; // Shift to move down
+        // Add horizontal adjustment based on mouse x position
+        moveDirection.addScaledVector(cameraRight, this.mousePosition.x);
         
-        // Normalize movement direction if moving
+        // Normalize the direction vector
         if (moveDirection.lengthSq() > 0) {
             moveDirection.normalize();
-            this.localPlayer.move(moveDirection, deltaTime);
-            
-            // Make the player look in the movement direction
-            if (moveDirection.x !== 0 || moveDirection.z !== 0) {
-                const lookDirection = new THREE.Vector3(moveDirection.x, 0, moveDirection.z).normalize();
-                this.localPlayer.lookAt(lookDirection);
-            }
         }
+        
+        // Move the player in this direction
+        this.localPlayer.move(moveDirection, deltaTime);
+        this.localPlayer.lookAt(moveDirection);
     }
     
     // Event handlers
@@ -398,17 +455,57 @@ export class Game {
         // Handle special keys
         if (event.key === ' ' && !event.repeat) {
             // Space bar for splitting
-            this.socketManager.emit('splitPlayer');
-            console.log('Split command sent to server');
-        } else if (event.key === 'e' && !event.repeat) {
-            // 'e' key for ejecting mass
-            this.socketManager.emit('ejectMass');
-            console.log('Eject mass command sent to server');
+            if (this.localPlayer && this.localPlayer.mass >= 2) {  // Only split if enough mass
+                // Calculate split direction based on mouse position
+                const splitDir = this.calculateMouseDirection();
+                
+                // Create temporary visual split effect
+                const splitMass = this.localPlayer.mass / 2;
+                const splitRadius = Math.cbrt(splitMass);
+                const splitPos = this.localPlayer.position.clone().add(
+                    splitDir.multiplyScalar(this.localPlayer.radius + splitRadius)
+                );
+                
+                // Update local player visually
+                this.localPlayer.mass = splitMass;
+                this.localPlayer.updateSize();
+                
+                // Send split command to server
+                this.socketManager.emit('splitPlayer', {
+                    direction: splitDir.toArray(),
+                    position: splitPos.toArray(),
+                    mass: splitMass
+                });
+                console.log('Split command sent to server');
+            }
+        } else if (event.key.toLowerCase() === 'w' && !event.repeat) {
+            // 'w' key for ejecting mass
+            if (this.localPlayer && this.localPlayer.mass > 1) {  // Only eject if enough mass
+                // Calculate eject direction based on mouse position
+                const ejectDir = this.calculateMouseDirection();
+                
+                // Create temporary visual mass orb
+                const orbMass = Math.min(this.localPlayer.mass * 0.1, 1);  // 10% of mass up to 1
+                const orbRadius = Math.cbrt(orbMass);
+                const orbPos = this.localPlayer.position.clone().add(
+                    ejectDir.multiplyScalar(this.localPlayer.radius + orbRadius)
+                );
+                
+                // Update local player visually
+                this.localPlayer.mass -= orbMass;
+                this.localPlayer.updateSize();
+                
+                // Send eject command to server
+                this.socketManager.emit('ejectMass', {
+                    direction: ejectDir.toArray(),
+                    position: orbPos.toArray(),
+                    mass: orbMass
+                });
+                console.log('Eject mass command sent to server');
+            }
         } else if (event.key === 'c' && !event.repeat) {
-            // 'c' key for changing camera view
             this.cameraController.toggleCameraMode();
         } else if (event.key === 'l' && !event.repeat) {
-            // 'l' key for toggling pointer lock
             if (document.pointerLockElement === this.renderer.domElement) {
                 document.exitPointerLock();
             } else {
@@ -426,24 +523,48 @@ export class Game {
             // When pointer is locked, camera controller handles movement
             // We don't need to do anything here
         } else {
-            // Update mouse position for non-locked mode
-            this.mousePosition.x = (event.clientX / window.innerWidth) * 2 - 1;
-            this.mousePosition.y = -(event.clientY / window.innerHeight) * 2 + 1;
+            // Calculate mouse position relative to the center of the screen
+            // Center of the screen (0,0) should correspond to straight ahead
+            const centerX = window.innerWidth / 2;
+            const centerY = window.innerHeight / 2;
+            
+            // Calculate normalized position (-1 to 1) with (0,0) at center
+            this.mousePosition.x = ((event.clientX - centerX) / (window.innerWidth / 2));
+            // Keep the Y-axis inverted for natural feel
+            this.mousePosition.y = ((event.clientY - centerY) / (window.innerHeight / 2));
+            
+            // Optional: Apply sensitivity adjustment to make movement more controlled
+            const sensitivity = 0.8; // Adjust this value as needed
+            this.mousePosition.x *= sensitivity;
+            this.mousePosition.y *= sensitivity;
             
             // Use mouse position to determine direction in 3D space
-            const vector = new THREE.Vector3(this.mousePosition.x, this.mousePosition.y, 0.5);
-            vector.unproject(this.camera);
-            const dir = vector.sub(this.camera.position).normalize();
-            const distance = -this.camera.position.y / dir.y;
-            const pos = this.camera.position.clone().add(dir.multiplyScalar(distance));
+            // Get camera's forward direction
+            const cameraForward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion);
+            cameraForward.y = 0; // Keep on xz plane
+            cameraForward.normalize();
             
-            // Calculate direction from player to target point on the plane
+            // Get camera's right direction
+            const cameraRight = new THREE.Vector3(1, 0, 0).applyQuaternion(this.camera.quaternion);
+            cameraRight.y = 0; // Keep on xz plane
+            cameraRight.normalize();
+            
+            // Calculate target direction by combining forward and right vectors based on mouse position
+            const targetDirection = new THREE.Vector3();
+            targetDirection.addScaledVector(cameraForward, 1); // Base forward movement
+            targetDirection.addScaledVector(cameraRight, this.mousePosition.x); // Adjust based on horizontal mouse position
+            
+            // Calculate target position
+            const targetDistance = 10; // How far ahead to look
+            const targetPosition = this.localPlayer ? 
+                this.localPlayer.position.clone().addScaledVector(targetDirection.normalize(), targetDistance) : 
+                this.camera.position.clone().addScaledVector(targetDirection.normalize(), targetDistance);
+            
+            // Use this target position for player movement/rotation
             if (this.localPlayer) {
-                const targetDirection = pos.sub(this.localPlayer.position).normalize();
-                // Ignore Y component for a more intuitive control
-                targetDirection.y = 0;
-                targetDirection.normalize();
-                this.localPlayer.lookAt(targetDirection);
+                const moveDirection = targetPosition.clone().sub(this.localPlayer.position).normalize();
+                moveDirection.y = 0; // Keep on xz plane
+                this.localPlayer.lookAt(moveDirection);
             }
         }
     }
@@ -599,11 +720,12 @@ export class Game {
         console.log(`Spawning ${count} initial viruses`);
         
         for (let i = 0; i < count; i++) {
-            // Create random positions within 80% of world bounds to avoid edge spawning
+            // Create random positions within 90% of world bounds to avoid edge spawning
+            // Use the boundaries defined in createBoundaries
             const position = new THREE.Vector3(
-                (Math.random() - 0.5) * this.worldSize * 0.8,
+                (Math.random() * this.worldSize * 1.8) - this.worldSize * 0.9,
                 0, // Keep on the ground plane
-                (Math.random() - 0.5) * this.worldSize * 0.8
+                (Math.random() * this.worldSize * 1.8) - this.worldSize * 0.9
             );
             
             // Create the virus with a unique ID
@@ -654,10 +776,11 @@ export class Game {
     
     // Spawn a new virus at a random position
     spawnNewVirus() {
+        // Use the same boundary calculation as initial spawning
         const position = new THREE.Vector3(
-            (Math.random() - 0.5) * this.worldSize * 0.8,
+            (Math.random() * this.worldSize * 1.8) - this.worldSize * 0.9,
             0,
-            (Math.random() - 0.5) * this.worldSize * 0.8
+            (Math.random() * this.worldSize * 1.8) - this.worldSize * 0.9
         );
         
         this.addVirus({
@@ -765,5 +888,201 @@ export class Game {
             // Remove from collection
             this.massOrbs.delete(id);
         }
+    }
+    
+    // Add this new method to set up socket event handlers
+    setupSocketEvents() {
+        // Handle player split event
+        this.socketManager.on('playerSplit', (data) => {
+            this.handlePlayerSplit(data);
+        });
+        
+        // Handle other socket events as needed
+    }
+    
+    // Handle player split event from the server
+    handlePlayerSplit(data) {
+        const { parentId, fragment } = data;
+        
+        // Get the parent player that split
+        const parentPlayer = this.players.get(parentId);
+        if (!parentPlayer) {
+            console.error('Parent player not found for split:', parentId);
+            return;
+        }
+        
+        // Create a new player for the fragment
+        const fragmentPlayer = new Player({
+            id: fragment.id,
+            username: fragment.username,
+            position: new THREE.Vector3().fromArray(fragment.position),
+            color: new THREE.Color(parseInt(fragment.color, 16)),
+            mass: fragment.mass,
+            radius: Math.cbrt(fragment.mass),
+            // Set fragment properties to enable visual effects
+            isFragment: true,
+            ejectionDirection: new THREE.Vector3().fromArray(fragment.velocity).normalize(),
+            ejectionForce: 25 // Increase force for more dramatic effect
+        });
+        
+        // Add the fragment to the scene and player list
+        this.scene.add(fragmentPlayer.mesh);
+        this.players.set(fragment.id, fragmentPlayer);
+        
+        // Add particle effect at split point for visual flair
+        this.addSplitParticles(parentPlayer.position.clone(), parentPlayer.color);
+        
+        // Add a camera shake effect for dramatic effect
+        if (parentId === this.localPlayerId) {
+            this.cameraController.addShake(0.3, 0.2); // intensity, duration
+        }
+        
+        console.log(`Player ${parentId} split, created fragment ${fragment.id}`);
+    }
+    
+    // Add a particle effect when a player splits
+    addSplitParticles(position, color) {
+        // Create a simple particle system for the split effect
+        const particleCount = 15;
+        const geometry = new THREE.BufferGeometry();
+        const positions = new Float32Array(particleCount * 3);
+        
+        // Set up particles in a spherical pattern
+        for (let i = 0; i < particleCount; i++) {
+            const i3 = i * 3;
+            positions[i3] = position.x;
+            positions[i3 + 1] = position.y;
+            positions[i3 + 2] = position.z;
+        }
+        
+        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        
+        const particleMaterial = new THREE.PointsMaterial({
+            color: color,
+            size: 0.3,
+            transparent: true,
+            opacity: 0.8
+        });
+        
+        const particles = new THREE.Points(geometry, particleMaterial);
+        this.scene.add(particles);
+        
+        // Store velocities for each particle
+        const velocities = [];
+        for (let i = 0; i < particleCount; i++) {
+            // Random direction
+            const velocity = new THREE.Vector3(
+                (Math.random() - 0.5) * 10,
+                (Math.random() - 0.5) * 10,
+                (Math.random() - 0.5) * 10
+            ).normalize().multiplyScalar(5 + Math.random() * 5);
+            velocities.push(velocity);
+        }
+        
+        // Animation duration
+        const duration = 0.5;
+        let elapsed = 0;
+        
+        // Create animation function
+        const animate = (deltaTime) => {
+            elapsed += deltaTime;
+            
+            // Update particle positions
+            const positions = particles.geometry.attributes.position.array;
+            
+            for (let i = 0; i < particleCount; i++) {
+                const i3 = i * 3;
+                
+                // Apply velocity
+                positions[i3] += velocities[i].x * deltaTime;
+                positions[i3 + 1] += velocities[i].y * deltaTime;
+                positions[i3 + 2] += velocities[i].z * deltaTime;
+                
+                // Fade out based on elapsed time
+                particleMaterial.opacity = 0.8 * (1 - elapsed / duration);
+            }
+            
+            particles.geometry.attributes.position.needsUpdate = true;
+            
+            // Remove when animation is complete
+            if (elapsed >= duration) {
+                this.scene.remove(particles);
+                particles.geometry.dispose();
+                particleMaterial.dispose();
+                return;
+            }
+            
+            // Continue animation with proper time handling
+            const now = performance.now();
+            requestAnimationFrame(() => animate((now - lastTime) / 1000));
+            lastTime = now;
+        };
+        
+        // Start animation
+        let lastTime = performance.now();
+        requestAnimationFrame(() => animate(1/60));
+    }
+
+    // Helper method to calculate direction based on mouse position
+    calculateMouseDirection() {
+        // Get camera's forward direction
+        const cameraForward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion);
+        cameraForward.y = 0; // Keep on xz plane
+        cameraForward.normalize();
+        
+        // Get camera's right direction
+        const cameraRight = new THREE.Vector3(1, 0, 0).applyQuaternion(this.camera.quaternion);
+        cameraRight.y = 0; // Keep on xz plane
+        cameraRight.normalize();
+        
+        // Calculate movement direction based on mouse position
+        const direction = new THREE.Vector3();
+        
+        // Add forward movement
+        direction.addScaledVector(cameraForward, 1);
+        
+        // Add horizontal adjustment based on mouse x position
+        direction.addScaledVector(cameraRight, this.mousePosition.x);
+        
+        // Normalize the direction vector
+        return direction.normalize();
+    }
+
+    // Method to spawn initial food
+    spawnInitialFood(count) {
+        console.log(`Spawning ${count} initial food items`);
+        
+        for (let i = 0; i < count; i++) {
+            this.spawnNewFood();
+        }
+    }
+    
+    // Spawn a new food item at a random position
+    spawnNewFood() {
+        // Create random position within 80% of world bounds to avoid edge spawning
+        const position = new THREE.Vector3(
+            (Math.random() - 0.5) * this.worldSize * 0.8,
+            0, // Keep on the ground plane
+            (Math.random() - 0.5) * this.worldSize * 0.8
+        );
+        
+        // Create a new food item with random properties
+        const foodId = 'food_' + crypto.randomUUID();
+        const mass = Math.random() * 2 + 1; // Random mass between 1 and 3
+        const radius = 0.3 + (mass * 0.1); // Small radius based on mass
+        
+        const newFood = new Food({
+            id: foodId,
+            position: position,
+            mass: mass
+        });
+        
+        // Add to the foods collection
+        this.foods.set(foodId, newFood);
+        
+        // Add to the scene
+        this.scene.add(newFood.mesh);
+        
+        return newFood;
     }
 }

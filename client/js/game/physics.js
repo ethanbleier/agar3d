@@ -6,48 +6,71 @@ import { THREE } from '../lib/three-instance.js';
 export class PhysicsSystem {
     constructor() {
         this.tempVector = new THREE.Vector3();
-        this.boundarySize = 250; // Half the size of the game world
+        this.boundarySize = 250; // Default boundary size
+        
+        // World boundaries (will be set by the game)
+        this.minX = -this.boundarySize;
+        this.maxX = this.boundarySize;
+        this.minZ = -this.boundarySize;
+        this.maxZ = this.boundarySize;
+    }
+    
+    // Method to set the world boundaries
+    setBoundaries(minX, maxX, minZ, maxZ) {
+        this.minX = minX;
+        this.maxX = maxX;
+        this.minZ = minZ;
+        this.maxZ = maxZ;
+        console.log(`Physics boundaries set to: X(${minX}, ${maxX}), Z(${minZ}, ${maxZ})`);
     }
     
     update(deltaTime, players, foods, localPlayerId, viruses) {
-        // Check for player-food collisions
-        this.checkPlayerFoodCollisions(players, foods, localPlayerId);
+        // Check for collisions between the local player and food
+        const foodsToRemove = this.checkPlayerFoodCollisions(players, foods, localPlayerId);
         
-        // Check for player-player collisions
+        // Check for collisions between players
         this.checkPlayerPlayerCollisions(players, localPlayerId);
         
-        // Check for player-virus collisions if viruses are provided
-        if (viruses && viruses.size > 0) {
-            this.checkPlayerVirusCollisions(players, viruses, localPlayerId);
-        }
+        // Check for collisions between the local player and viruses
+        this.checkPlayerVirusCollisions(players, viruses, localPlayerId);
         
-        // Check boundary collisions for local player
-        const localPlayer = players.get(localPlayerId);
-        if (localPlayer) {
-            this.enforceBoundary(localPlayer);
-        }
+        // Enforce world boundaries for all players
+        players.forEach(player => {
+            this.enforceBoundary(player);
+        });
+        
+        // Enforce world boundaries for all viruses to match player behavior
+        viruses.forEach(virus => {
+            this.enforceEntityBoundary(virus);
+        });
+        
+        // Return the list of foods to remove
+        return foodsToRemove;
     }
     
     checkPlayerFoodCollisions(players, foods, localPlayerId) {
         const localPlayer = players.get(localPlayerId);
         if (!localPlayer) return;
         
+        const foodsToRemove = [];
+        
         foods.forEach((food, foodId) => {
             // Simple distance-based collision detection
-            const distance = localPlayer.position.distanceTo(food.position);
+            const distance = localPlayer.position.distanceTo(food.mesh.position);
             
-            // If the player's radius plus the food's radius is greater than the distance,
+            // If the player's radius is greater than the distance to the food center plus the food radius,
             // they are colliding
-            if (distance < (localPlayer.radius + food.radius)) {
-                // Consume the food
+            if (distance < (localPlayer.radius + food.radius * 0.5)) {
+                // Consume the food - add its mass to the player
                 localPlayer.grow(food.mass);
                 
                 // Mark food for removal
-                // The actual removal happens in the game class
-                food.consumed = true;
-                food.consumedBy = localPlayerId;
+                foodsToRemove.push(foodId);
             }
         });
+        
+        // Return the list of foods to remove
+        return foodsToRemove;
     }
     
     checkPlayerPlayerCollisions(players, localPlayerId) {
@@ -98,15 +121,35 @@ export class PhysicsSystem {
         });
     }
     
-    enforceBoundary(player) {
-        // Keep the player within the game boundaries
-        const boundaryRadius = this.boundarySize - player.radius;
+    enforceEntityBoundary(entity) {
+        // Clamp X position
+        if (entity.position.x < this.minX + entity.radius) {
+            entity.position.x = this.minX + entity.radius;
+            if (entity.mesh) entity.mesh.position.x = entity.position.x;
+        } else if (entity.position.x > this.maxX - entity.radius) {
+            entity.position.x = this.maxX - entity.radius;
+            if (entity.mesh) entity.mesh.position.x = entity.position.x;
+        }
         
-        const distanceFromCenter = player.position.length();
-        if (distanceFromCenter > boundaryRadius) {
-            // Push the player back towards the center
-            const direction = player.position.clone().normalize();
-            player.position.copy(direction.multiplyScalar(boundaryRadius));
+        // Clamp Z position
+        if (entity.position.z < this.minZ + entity.radius) {
+            entity.position.z = this.minZ + entity.radius;
+            if (entity.mesh) entity.mesh.position.z = entity.position.z;
+        } else if (entity.position.z > this.maxZ - entity.radius) {
+            entity.position.z = this.maxZ - entity.radius;
+            if (entity.mesh) entity.mesh.position.z = entity.position.z;
+        }
+    }
+    
+    enforceBoundary(player) {
+        this.enforceEntityBoundary(player);
+        
+        // Update the player's mesh and label if they exist
+        if (player.mesh) {
+            player.mesh.position.copy(player.position);
+        }
+        if (player.label) {
+            player.label.position.copy(player.position).add(new THREE.Vector3(0, player.radius + 0.5, 0));
         }
     }
 }
