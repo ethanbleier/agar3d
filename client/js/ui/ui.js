@@ -262,7 +262,11 @@ export class UI {
         // Add each player to the leaderboard
         leaderboard.forEach((player) => {
             const listItem = document.createElement('li');
-            listItem.textContent = `${player.username} (${player.mass})`;
+            
+            // Don't add player rank to avoid duplication with <ol> automatic numbering
+            // Remove trailing " 1" from username if present
+            const displayUsername = player.username.replace(/ 1$/, '');
+            listItem.textContent = `${displayUsername} (${player.mass})`;
             
             // Highlight the local player
             if (player.isLocalPlayer) {

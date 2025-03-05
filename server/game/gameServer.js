@@ -215,10 +215,21 @@ class GameServer {
     
     handlePlayerBoost(playerId) {
         const player = this.players.get(playerId);
-        if (!player || player.mass < 2) return;
+        if (!player) return;
         
-        // Implement boosting logic (will be added in the future)
-        console.log(`Player ${player.username} (${playerId}) attempted to boost`);
+        // Try to boost the player
+        const boostSuccess = player.boost();
+        
+        if (boostSuccess) {
+            // Broadcast the boost to all clients
+            this.io.emit('playerBoosted', {
+                id: playerId,
+                position: player.position.toArray(),
+                mass: player.mass
+            });
+            
+            console.log(`Player ${player.username} (${playerId}) boosted - New mass: ${player.mass.toFixed(2)}`);
+        }
     }
     
     handlePlayerEjectMass(playerId, data) {
@@ -318,6 +329,21 @@ class GameServer {
         // Skip if not running
         if (!this.isRunning) {
             return;
+        }
+        
+        // Check for survival score for all players
+        // Note: player.update() is called in the physics system, so we don't call it here
+        for (const player of this.players.values()) {
+            // Check if player has survived another minute (60 seconds)
+            // We use Math.floor to check if the player has crossed a full minute threshold
+            const previousMinutesAlive = Math.floor((player.timeAlive - deltaTime) / 60);
+            const currentMinutesAlive = Math.floor(player.timeAlive / 60);
+            
+            // If the player has survived another full minute, award 10 score points
+            if (currentMinutesAlive > previousMinutesAlive) {
+                player.score += 10;
+                console.log(`[SCORE] Player ${player.username} (${player.id}) earned 10 survival points for being alive for ${currentMinutesAlive} minutes. Total score: ${player.score.toFixed(0)}`);
+            }
         }
         
         // Update physics for players and foods
@@ -458,11 +484,12 @@ class GameServer {
     updateLeaderboard() {
         // Create leaderboard data
         const leaderboardData = Array.from(this.players.values())
-            .sort((a, b) => b.mass - a.mass)
+            .sort((a, b) => b.score - a.score) // Sort by score instead of mass
             .slice(0, 10)
             .map((player, index) => ({
                 username: player.username,
                 mass: Math.floor(player.mass),
+                score: Math.floor(player.score), // Include score in leaderboard data
                 rank: index + 1,
                 id: player.id
             }));
@@ -479,7 +506,7 @@ class GameServer {
             } else {
                 // Player not in top 10, add their rank
                 const rank = Array.from(this.players.values())
-                    .sort((a, b) => b.mass - a.mass)
+                    .sort((a, b) => b.score - a.score) // Sort by score instead of mass
                     .findIndex(p => p.id === player.id) + 1;
                 
                 this.io.to(player.id).emit('leaderboard', [
@@ -490,6 +517,7 @@ class GameServer {
                     {
                         username: player.username,
                         mass: Math.floor(player.mass),
+                        score: Math.floor(player.score), // Include score in leaderboard data
                         rank: rank,
                         id: player.id,
                         isLocalPlayer: true

@@ -35,7 +35,7 @@ app.use(express.static(path.join(__dirname, '../client')));
 // Initialize Socket.io server with improved configuration
 const io = new Server(server, {
     cors: {
-        origin: "*",  // Allow all origins
+        origin: ["http://localhost:8080", "http://127.0.0.1:8080"],  // Explicitly allow client's port
         methods: ["GET", "POST"],
         allowedHeaders: ["*"],
         credentials: true

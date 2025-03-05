@@ -164,8 +164,30 @@ class ServerPlayer {
     }
     
     boost() {
-        // To be implemented
-        // Will eject mass and boost player in the opposite direction
+        // Only boost if player has enough mass
+        const boostCost = 3;
+        if (this.mass <= boostCost) {
+            return false;
+        }
+        
+        // Deduct mass
+        this.mass -= boostCost;
+        this.updateSize();
+        
+        // Get player's forward direction based on rotation
+        const forwardDirection = new Vector3(0, 0, -1);
+        forwardDirection.applyQuaternion(this.rotation);
+        
+        // Apply boost force
+        const boostForce = 20; // Boost force magnitude
+        this.velocity.add(forwardDirection.multiplyScalar(boostForce));
+        
+        // Limit velocity to max speed
+        if (this.velocity.length() > this.maxSpeed * 2.5) {
+            this.velocity.normalize().multiplyScalar(this.maxSpeed * 2.5);
+        }
+        
+        return true;
     }
     
     toClientData() {
@@ -177,7 +199,8 @@ class ServerPlayer {
             rotation: this.rotation.toArray(),
             scale: this.scale.toArray(),
             color: this.color,
-            mass: this.mass
+            mass: this.mass,
+            score: this.score
         };
     }
 }

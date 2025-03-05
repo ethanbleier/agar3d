@@ -2,7 +2,7 @@
 
 import { Game } from './game/index.js';
 import { SocketManager } from './networking/socket.js';
-import { THREE, OrbitControls } from './lib/three-instance.js';
+import { THREE } from './lib/three-instance.js';
 
 let game;
 let socketManager;
@@ -24,7 +24,7 @@ function init() {
         if (username) {
             startGame(username);
         } else {
-            alert('Please enter a username');
+            alert('Enter your gamertag');
         }
     });
 
@@ -177,6 +177,8 @@ function updateLeaderboard(leaderboardData) {
     const leaderboardList = document.getElementById('leaderboard-list');
     if (!leaderboardList) return;
     
+    console.log('Updating leaderboard with data:', leaderboardData);
+    
     // Clear existing entries
     leaderboardList.innerHTML = '';
     
@@ -189,11 +191,27 @@ function updateLeaderboard(leaderboardData) {
             listItem.className = 'local-player';
         }
         
-        listItem.innerHTML = `
-            <span class="rank">${player.rank}</span>
-            <span class="username">${player.username}</span>
-            <span class="score">${player.mass}</span>
-        `;
+        // Process username to remove trailing " 1" if present
+        const originalUsername = player.username;
+        const displayUsername = originalUsername.endsWith(' 1') 
+            ? originalUsername.substring(0, originalUsername.length - 2) 
+            : originalUsername;
+        
+        console.log(`Player: ${originalUsername} -> ${displayUsername}`);
+        
+        // Create username span
+        const usernameSpan = document.createElement('span');
+        usernameSpan.className = 'username';
+        usernameSpan.textContent = displayUsername;
+        
+        // Create score span
+        const scoreSpan = document.createElement('span');
+        scoreSpan.className = 'score';
+        scoreSpan.textContent = player.score !== undefined ? player.score : player.mass;
+        
+        // Append spans to list item
+        listItem.appendChild(usernameSpan);
+        listItem.appendChild(scoreSpan);
         
         leaderboardList.appendChild(listItem);
     });
