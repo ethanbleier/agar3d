@@ -68,8 +68,8 @@ class GameServer {
             });
             
             // Player eject mass action
-            socket.on('ejectMass', () => {
-                this.handlePlayerEjectMass(socket.id);
+            socket.on('ejectMass', (data) => {
+                this.handlePlayerEjectMass(socket.id, data);
             });
             
             // Player disconnected
@@ -132,7 +132,15 @@ class GameServer {
     
     handlePlayerSplit(playerId) {
         const player = this.players.get(playerId);
-        if (!player || player.mass < 2) return;
+        if (!player) {
+            console.log(`[ERROR] Player ${playerId} not found for split action`);
+            return;
+        }
+        
+        if (player.mass < 2) {
+            console.log(`[INFO] Player ${player.username} (${playerId}) doesn't have enough mass to split (mass: ${player.mass.toFixed(2)})`);
+            return;
+        }
         
         // Call the player's split method to get new fragment configuration
         const fragmentConfig = player.split();
@@ -156,7 +164,7 @@ class GameServer {
                 fragment: fragmentPlayer.toClientData()
             });
             
-            console.log(`Player ${player.username} (${playerId}) split successfully, created fragment ${fragmentConfig.id}`);
+            console.log(`[ACTION] Player ${player.username} (${playerId}) split successfully - Original mass: ${player.mass.toFixed(2)} - Fragment mass: ${fragmentPlayer.mass.toFixed(2)} - Fragment ID: ${fragmentConfig.id}`);
         }
     }
     
@@ -168,20 +176,20 @@ class GameServer {
         console.log(`Player ${player.username} (${playerId}) attempted to boost`);
     }
     
-    handlePlayerEjectMass(playerId) {
+    handlePlayerEjectMass(playerId, data) {
         const player = this.players.get(playerId);
         if (!player) {
-            console.log(`Player ${playerId} not found for mass ejection`);
+            console.log(`[ERROR] Player ${playerId} not found for mass ejection`);
             return;
         }
         
         // Minimum mass required to eject
         const MIN_MASS_TO_EJECT = 2;
-        // Mass amount to eject
-        const EJECTED_MASS_AMOUNT = 1;
+        // Mass amount to eject (use client value or default)
+        const EJECTED_MASS_AMOUNT = data && data.mass ? data.mass : 1;
         
         if (player.mass < MIN_MASS_TO_EJECT) {
-            console.log(`Player ${player.username} (${playerId}) doesn't have enough mass to eject`);
+            console.log(`[INFO] Player ${player.username} (${playerId}) doesn't have enough mass to eject`);
             return; // Not enough mass to eject
         }
         
@@ -189,13 +197,23 @@ class GameServer {
         player.mass -= EJECTED_MASS_AMOUNT;
         player.updateSize(); // Update player size based on new mass
         
-        // Create a mass orb in front of the player
-        const direction = new Vector3(0, 0, -1).applyQuaternion(player.rotation).normalize();
+        // Use direction from client or default
+        let direction;
+        if (data && data.direction) {
+            direction = new Vector3().fromArray(data.direction).normalize();
+        } else {
+            direction = new Vector3(0, 0, -1).applyQuaternion(player.rotation).normalize();
+        }
         
-        // Position the mass orb in front of the player
-        const spawnPosition = player.position.clone().add(
-            direction.clone().multiplyScalar(player.radius + 0.5)
-        );
+        // Use position from client or calculate it
+        let spawnPosition;
+        if (data && data.position) {
+            spawnPosition = new Vector3().fromArray(data.position);
+        } else {
+            spawnPosition = player.position.clone().add(
+                direction.clone().multiplyScalar(player.radius + 0.5)
+            );
+        }
         
         // Create a unique ID for the mass orb
         const massId = `mass_${uuidv4()}`;
@@ -223,19 +241,19 @@ class GameServer {
         // Broadcast the mass ejection to all clients
         this.io.emit('massEjected', massOrb);
         
-        console.log(`Player ${player.username} (${playerId}) ejected mass ${massId}`);
+        console.log(`[ACTION] Player ${player.username} (${playerId}) ejected mass ${massId} - Current mass: ${player.mass.toFixed(2)}`);
     }
     
     handlePlayerDisconnect(playerId) {
         const player = this.players.get(playerId);
         if (!player) return;
         
-        console.log(`Player ${player.username} (${playerId}) disconnected`);
+        console.log(`[DISCONNECT] Player ${player.username} (${playerId}) disconnected - Final mass: ${player.mass.toFixed(2)} - Score: ${player.score.toFixed(0)} - Time alive: ${player.timeAlive.toFixed(0)}s`);
         
         // Remove player from game
         this.players.delete(playerId);
         
-        // Notify all players
+        // Notify all clients
         this.io.emit('playerLeft', playerId);
     }
     
@@ -259,7 +277,10 @@ class GameServer {
         
         // Remove consumed food and notify clients
         if (consumedFood && consumedFood.length > 0) {
-            for (const { foodId, playerId } of consumedFood) {
+            for (const { foodId, playerId, foodValue } of consumedFood) {
+                // Get player info for logging
+                const player = this.players.get(playerId);
+                
                 // Remove food from game
                 this.foods.delete(foodId);
                 
@@ -268,7 +289,31 @@ class GameServer {
                     foodId: foodId,
                     playerId: playerId
                 });
+                
+                // Log the food consumption
+                if (player) {
+                    console.log(`[CONSUME] Player ${player.username} (${playerId}) ate food ${foodId} - Value: ${foodValue.toFixed(2)} - New mass: ${player.mass.toFixed(2)}`);
+                }
             }
+        }
+        
+        // Check for player-player consumption
+        const playerConsumption = this.physics.checkPlayerCollisions(this.players);
+        if (playerConsumption) {
+            const { predator, prey } = playerConsumption;
+            console.log(`[CONSUME] Player ${predator.username} (${predator.id}) ate player ${prey.username} (${prey.id}) - Gained mass: ${(prey.mass * 0.8).toFixed(2)} - New mass: ${predator.mass.toFixed(2)}`);
+            
+            // Remove consumed player
+            this.players.delete(prey.id);
+            
+            // Log player death
+            console.log(`[DEATH] Player ${prey.username} (${prey.id}) was eaten by ${predator.username} (${predator.id}) - Final score: ${prey.score.toFixed(0)} - Time alive: ${prey.timeAlive.toFixed(0)}s`);
+            
+            // Notify clients
+            this.io.emit('playerConsumed', {
+                predatorId: predator.id,
+                preyId: prey.id
+            });
         }
         
         // Spawn new food if needed
@@ -557,8 +602,16 @@ class GameServer {
                 // Player absorbs the mass
                 player.grow(massOrb.mass);
                 
+                // Log the mass consumption
+                const ownerPlayer = this.players.get(massOrb.ownerId);
+                const ownerName = ownerPlayer ? ownerPlayer.username : 'unknown';
+                console.log(`[CONSUME] Player ${player.username} (${playerId}) ate mass orb ${massId} from ${ownerName} (${massOrb.ownerId}) - Value: ${massOrb.mass.toFixed(2)} - New mass: ${player.mass.toFixed(2)}`);
+                
                 // Mark mass orb for removal
                 massOrbsToRemove.push(massId);
+                
+                // Notify clients
+                this.io.emit('massConsumed', massId);
                 
                 break; // Exit the loop since this mass orb is consumed
             }
@@ -584,8 +637,14 @@ class GameServer {
                 virusPosition, virus.radius
             )) {
                 // Virus absorbs the mass
+                const oldMass = virus.mass;
                 virus.mass += massOrb.mass;
                 virus.radius = Math.cbrt(virus.radius ** 3 + massOrb.mass);
+                
+                // Log the virus growing
+                const ownerPlayer = this.players.get(massOrb.ownerId);
+                const ownerName = ownerPlayer ? ownerPlayer.username : 'unknown';
+                console.log(`[VIRUS] Virus ${virusId} absorbed mass orb ${massId} from ${ownerName} (${massOrb.ownerId}) - Old mass: ${oldMass.toFixed(2)} - New mass: ${virus.mass.toFixed(2)}`);
                 
                 // Update virus in game state
                 this.io.emit('virusUpdated', {

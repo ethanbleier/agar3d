@@ -133,6 +133,17 @@ export class SocketManager {
             console.log('Player popped:', data);
             this.triggerEvent('playerPopped', data);
         });
+        
+        // Mass orb events
+        this.socket.on('massEjected', (massData) => {
+            console.log('Mass ejected:', massData);
+            this.triggerEvent('massEjected', massData);
+        });
+        
+        this.socket.on('massConsumed', (massId) => {
+            console.log('Mass consumed:', massId);
+            this.triggerEvent('massConsumed', massId);
+        });
     }
     
     // Client -> Server events
