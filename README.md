@@ -1,14 +1,12 @@
 ### Prereqs
 
-- [Node.js](https://nodejs.org/) (v16.x or higher recommended)
-- npm or [yarn](https://yarnpkg.com/)
-- Modern web browser with WebGL support
-- Basic knowledge of JavaScript/HTML/CSS
-- (Optional) [Git](https://git-scm.com/) for version control
+- Node.js v16.x or higher
+- npm or yarn
+- Browser with WebGL support
 
 ### Installation
 
-1. Clone the repository or download the source code:
+1. Clone this repository:
    ```
    git clone https://github.com/ethanbleier/agar3d.git
    cd agar3d
