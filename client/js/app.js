@@ -114,6 +114,33 @@ function setupSocketListeners() {
     socketManager.on('gameState', (gameState) => {
         game.updateGameState(gameState);
     });
+    
+    // Add handlers for virus events
+    socketManager.on('virusSpawned', (virusData) => {
+        game.addVirus(virusData);
+    });
+    
+    socketManager.on('virusConsumed', (virusId) => {
+        game.removeVirus(virusId);
+    });
+    
+    socketManager.on('playerPopped', (data) => {
+        // Handle player popping from virus collision
+        const { playerId, fragments } = data;
+        
+        // Get the player that popped
+        const player = game.players.get(playerId);
+        if (player) {
+            // Update the original player size
+            player.mass = fragments[0].mass;
+            player.updateSize();
+            
+            // Create fragment players
+            for (let i = 1; i < fragments.length; i++) {
+                game.addPlayerFragment(fragments[i]);
+            }
+        }
+    });
 }
 
 function onWindowResize() {

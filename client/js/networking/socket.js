@@ -117,6 +117,22 @@ export class SocketManager {
             console.log('Server message:', message);
             this.triggerEvent('serverMessage', message);
         });
+        
+        // Virus events
+        this.socket.on('virusSpawned', (virusData) => {
+            console.log('Virus spawned:', virusData);
+            this.triggerEvent('virusSpawned', virusData);
+        });
+        
+        this.socket.on('virusConsumed', (data) => {
+            console.log('Virus consumed:', data);
+            this.triggerEvent('virusConsumed', data);
+        });
+        
+        this.socket.on('playerPopped', (data) => {
+            console.log('Player popped:', data);
+            this.triggerEvent('playerPopped', data);
+        });
     }
     
     // Client -> Server events
