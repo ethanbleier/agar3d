@@ -99,87 +99,103 @@ function startGame(username) {
     
     console.log('Starting game with username:', username);
     
-    // Initialize socket connection
+    // Generate a random color for the player
+    const playerColor = new THREE.Color(Math.random(), Math.random(), Math.random());
+    
+    // Initialize socket manager first to ensure connection
     socketManager = new SocketManager();
     socketManager.connect();
     
-    // Initialize the game
+    // Set up basic socket event listeners
+    setupSocketListeners();
+    
+    // Create game instance with socket manager
     game = new Game({
         containerId: 'game-container',
+        socketManager: socketManager,
         username: username,
-        socketManager: socketManager
+        playerColor: playerColor.getHex()
     });
     
-    console.log('Game initialized, starting game loop');
+    // When socket is connected, join the game
+    if (socketManager.connected) {
+        // Already connected, join immediately
+        socketManager.joinGame({
+            username: username,
+            color: playerColor.getHex()
+        });
+    }
+    // Otherwise the connect handler in setupSocketListeners will handle joining
     
-    // Start the game loop with timestamp
-    lastTimestamp = 0;
-    frameCount = 0;
-    lastFpsUpdate = 0;
+    // Start game loop with timestamp
     animationFrameId = requestAnimationFrame(gameLoop);
 }
 
 // Set up socket event listeners
 function setupSocketListeners() {
-    socketManager.on('playerJoined', (data) => {
-        game.addPlayer(data);
-    });
-    
-    socketManager.on('playerLeft', (id) => {
-        game.removePlayer(id);
-    });
-    
-    socketManager.on('gameState', (gameState) => {
-        game.updateGameState(gameState);
-    });
-    
-    socketManager.on('foodSpawned', (foodData) => {
-        game.addFood(foodData);
-    });
-    
-    socketManager.on('foodConsumed', (data) => {
-        game.removeFood(data.foodId);
-    });
-    
-    // Add handlers for player splitting
-    socketManager.on('playerSplit', (data) => {
-        game.handlePlayerSplit(data);
-    });
-    
-    // Add handlers for virus events
-    socketManager.on('virusSpawned', (virusData) => {
-        game.addVirus(virusData);
-    });
-    
-    socketManager.on('virusConsumed', (virusId) => {
-        game.removeVirus(virusId);
-    });
-    
-    // Add handlers for mass orb events
-    socketManager.on('massEjected', (massData) => {
-        game.addMassOrb(massData);
-    });
-    
-    socketManager.on('massConsumed', (massId) => {
-        game.removeMassOrb(massId);
-    });
-    
-    socketManager.on('playerPopped', (data) => {
-        // Handle player popping from virus collision
-        const { playerId, fragments } = data;
+    socketManager.on('connect', () => {
+        console.log('Connected to server with ID:', socketManager.id);
         
-        // Get the player that popped
-        const player = game.players.get(playerId);
-        if (player) {
-            // Update the original player size
-            player.mass = fragments[0].mass;
-            player.updateSize();
-            
-            // Create fragment players
-            for (let i = 1; i < fragments.length; i++) {
-                game.addPlayerFragment(fragments[i]);
-            }
+        // If game exists, join game with username
+        if (game && game.username) {
+            socketManager.joinGame({
+                username: game.username,
+                color: game.playerColor
+            });
         }
+    });
+    
+    socketManager.on('disconnect', () => {
+        console.log('Disconnected from server');
+        // Show disconnection message
+        const messages = document.getElementById('messages');
+        messages.innerHTML = `
+            <div class="message error">
+                <p>Disconnected from server.</p>
+                <p>Attempting to reconnect...</p>
+            </div>
+        `;
+    });
+    
+    // Player count updates
+    socketManager.on('playerCount', (data) => {
+        document.getElementById('players-count').textContent = data.count;
+        console.log(`Player count updated: ${data.count}/${data.max}`);
+    });
+    
+    // Handle leaderboard updates
+    socketManager.on('leaderboard', (leaderboardData) => {
+        updateLeaderboard(leaderboardData);
+    });
+    
+    // Note: Other game-specific events like playerJoined, playerLeft, gameState
+    // are now handled directly in the Game class setupSocketEvents method
+}
+
+// Update the leaderboard UI with current data
+function updateLeaderboard(leaderboardData) {
+    const leaderboardList = document.getElementById('leaderboard-list');
+    if (!leaderboardList) return;
+    
+    // Clear existing entries
+    leaderboardList.innerHTML = '';
+    
+    // Add new entries
+    leaderboardData.forEach((player) => {
+        const listItem = document.createElement('li');
+        
+        // Highlight the local player
+        if (game && game.localPlayerId === player.id) {
+            listItem.className = 'local-player';
+        }
+        
+        listItem.innerHTML = `
+            <span class="rank">${player.rank}</span>
+            <span class="username">${player.username}</span>
+            <span class="score">${player.mass}</span>
+        `;
+        
+        leaderboardList.appendChild(listItem);
     });
 }
 

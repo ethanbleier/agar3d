@@ -45,7 +45,22 @@ class GameServer {
     
     setupSocketHandlers() {
         this.io.on('connection', (socket) => {
-            console.log(`Player connected: ${socket.id}`);
+            console.log(`Player connected: ${socket.id} from ${socket.handshake.address}`);
+            
+            // Log socket connection details for debugging
+            console.log(`Socket details: transport=${socket.conn.transport.name}, query params:`, socket.handshake.query);
+            
+            // Send immediate feedback to client that connection is established
+            socket.emit('serverMessage', {
+                type: 'info',
+                message: 'Connected to server successfully!'
+            });
+            
+            // Send current player count to the newly connected client
+            socket.emit('playerCount', {
+                count: this.players.size,
+                max: this.maxPlayers
+            });
             
             // Player joined the game
             socket.on('joinGame', (data) => {
@@ -72,9 +87,27 @@ class GameServer {
                 this.handlePlayerEjectMass(socket.id, data);
             });
             
-            // Player disconnected
-            socket.on('disconnect', () => {
+            // Monitor for disconnect
+            socket.on('disconnect', (reason) => {
+                console.log(`Player ${socket.id} disconnected. Reason: ${reason}`);
                 this.handlePlayerDisconnect(socket.id);
+            });
+
+            // Handle ping requests (for latency testing)
+            socket.on('ping', (callback) => {
+                if (typeof callback === 'function') {
+                    callback();
+                }
+            });
+
+            // Handle reconnection attempts
+            socket.on('reconnect_attempt', (attemptNumber) => {
+                console.log(`Player ${socket.id} attempting to reconnect (attempt ${attemptNumber})`);
+            });
+
+            // Monitor for error events
+            socket.on('error', (error) => {
+                console.error(`Socket ${socket.id} error:`, error);
             });
         });
     }
@@ -88,6 +121,8 @@ class GameServer {
             });
             return;
         }
+        
+        console.log(`Player joining: ${data.username || 'Unknown'} (${socket.id})`);
         
         // Create new player
         const player = new ServerPlayer({
@@ -106,13 +141,23 @@ class GameServer {
             message: 'You have joined the game.'
         });
         
+        // Send individual data about all existing players to the new player
+        this.players.forEach((existingPlayer, playerId) => {
+            if (playerId !== socket.id) {
+                socket.emit('playerJoined', existingPlayer.toClientData());
+            }
+        });
+        
         // Send current game state to new player
         this.sendGameState(socket.id);
         
-        // Notify all players of new player
+        // Notify all other players of new player
         socket.broadcast.emit('playerJoined', player.toClientData());
         
-        console.log(`Player ${player.username} (${socket.id}) joined the game`);
+        console.log(`Player ${player.username} (${socket.id}) joined the game. Total players: ${this.players.size}`);
+        
+        // Broadcast updated player count to all clients
+        this.broadcastPlayerCount();
     }
     
     handlePositionUpdate(playerId, data) {
@@ -245,16 +290,19 @@ class GameServer {
     }
     
     handlePlayerDisconnect(playerId) {
-        const player = this.players.get(playerId);
-        if (!player) return;
-        
-        console.log(`[DISCONNECT] Player ${player.username} (${playerId}) disconnected - Final mass: ${player.mass.toFixed(2)} - Score: ${player.score.toFixed(0)} - Time alive: ${player.timeAlive.toFixed(0)}s`);
-        
-        // Remove player from game
-        this.players.delete(playerId);
-        
-        // Notify all clients
-        this.io.emit('playerLeft', playerId);
+        // If player exists, remove them from the game
+        if (this.players.has(playerId)) {
+            const player = this.players.get(playerId);
+            this.players.delete(playerId);
+            
+            // Notify other players that this player has left
+            this.io.emit('playerLeft', playerId);
+            
+            console.log(`Player ${playerId} removed from game. Total players: ${this.players.size}`);
+            
+            // Broadcast updated player count to all clients
+            this.broadcastPlayerCount();
+        }
     }
     
     startGameLoop() {
@@ -465,12 +513,12 @@ class GameServer {
         // Get random position for player spawn (avoid center of map)
         const radius = Math.random() * 0.3 + 0.2; // 20% to 50% of world radius
         const theta = Math.random() * Math.PI * 2;
-        const phi = Math.random() * Math.PI;
         
+        // Simplified spawn position calculation that keeps players on the XZ plane (y=0)
         return new Vector3(
-            radius * Math.sin(phi) * Math.cos(theta) * this.worldSize.x / 2,
-            radius * Math.sin(phi) * Math.sin(theta) * this.worldSize.y / 2,
-            radius * Math.cos(phi) * this.worldSize.z / 2
+            radius * Math.cos(theta) * this.worldSize.x / 2,
+            0, // Keep player on the floor
+            radius * Math.sin(theta) * this.worldSize.z / 2
         );
     }
     
@@ -660,6 +708,14 @@ class GameServer {
                 break; // Exit the loop since this mass orb is consumed
             }
         }
+    }
+    
+    // Send the current player count to all clients
+    broadcastPlayerCount() {
+        this.io.emit('playerCount', {
+            count: this.players.size,
+            max: this.maxPlayers
+        });
     }
 }
 
